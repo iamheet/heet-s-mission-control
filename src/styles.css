@@ -108,7 +108,14 @@
     background-image: repeating-linear-gradient(0deg, transparent 0, transparent 2px, oklch(1 0 0 / 0.02) 2px, oklch(1 0 0 / 0.02) 3px);
   }
   .led { box-shadow: 0 0 8px currentColor, 0 0 2px currentColor; }
+  .aurora-1 { animation: drift1 22s ease-in-out infinite alternate; }
+  .aurora-2 { animation: drift2 28s ease-in-out infinite alternate; }
+  .aurora-3 { animation: drift3 34s ease-in-out infinite alternate; }
 }
+
+@keyframes drift1 { from { transform: translate3d(0,0,0) scale(1); } to { transform: translate3d(8vw,6vh,0) scale(1.2); } }
+@keyframes drift2 { from { transform: translate3d(0,0,0) scale(1.1); } to { transform: translate3d(-6vw,-4vh,0) scale(1); } }
+@keyframes drift3 { from { transform: translate3d(0,0,0) scale(1); } to { transform: translate3d(-5vw,8vh,0) scale(1.15); } }
 
 @font-face {
   font-family: "Space Grotesk";

@@ -20,7 +20,7 @@ export function TopBar() {
         </div>
         <nav className="hidden md:flex items-center gap-5 text-muted-foreground">
           {["overview", "infra", "deploy", "observe", "stack", "systems", "k8s", "terminal", "contact"].map(s => (
-            <a key={s} href={`#${s}`} className="hover:text-foreground transition-colors">{s}</a>
+            <a key={s} href={`#${s}`} className="hover:text-foreground hover:text-glow-cyan transition-colors">{s}</a>
           ))}
         </nav>
         <div className="flex items-center gap-3">

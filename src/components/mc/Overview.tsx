@@ -1,9 +1,9 @@
 import { Panel, Metric, SectionHeader, StatusDot, Sparkline } from "./primitives";
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
+import { seededSpark } from "./rand";
 
-const spark = (n = 24, base = 50, amp = 30) =>
-  Array.from({ length: n }, (_, i) => base + Math.sin(i / 2) * amp * 0.5 + Math.random() * amp * 0.4);
+const spark = (seed: number, n = 24, base = 50, amp = 30) => seededSpark(seed, n, base, amp);
 
 export function Overview() {
   const [pulse, setPulse] = useState(0);
@@ -15,19 +15,19 @@ export function Overview() {
         <SectionHeader id="overview" kicker="// section 01" title="Mission Control Overview" desc="Real-time operational telemetry across infrastructure, deployments and monitoring planes." />
         <div className="grid grid-cols-12 gap-4">
           <div className="col-span-12 lg:col-span-8 grid grid-cols-2 md:grid-cols-3 gap-4">
-            <Metric label="Infra Health" value={99.97} suffix="%" decimals={2} accent="success" spark={spark(24, 95, 5)} />
-            <Metric label="Containers Running" value={47} accent="cyan" spark={spark(24, 40, 10)} />
-            <Metric label="Deploy Success Rate" value={98.4} suffix="%" decimals={1} accent="success" spark={spark(24, 95, 6)} />
-            <Metric label="System Uptime" value={742} suffix="d" accent="purple" spark={spark(24, 700, 50)} />
-            <Metric label="Monitoring Probes" value={128} accent="cyan" spark={spark(24, 120, 10)} />
-            <Metric label="Cloud Services" value={14} accent="warning" spark={spark(24, 12, 4)} />
+            <Metric label="Infra Health" value={99.97} suffix="%" decimals={2} accent="success" spark={spark(1, 24, 95, 5)} />
+            <Metric label="Containers Running" value={47} accent="cyan" spark={spark(2, 24, 40, 10)} />
+            <Metric label="Deploy Success Rate" value={98.4} suffix="%" decimals={1} accent="success" spark={spark(3, 24, 95, 6)} />
+            <Metric label="System Uptime" value={742} suffix="d" accent="purple" spark={spark(4, 24, 700, 50)} />
+            <Metric label="Monitoring Probes" value={128} accent="cyan" spark={spark(5, 24, 120, 10)} />
+            <Metric label="Cloud Services" value={14} accent="warning" spark={spark(6, 24, 12, 4)} />
           </div>
           <div className="col-span-12 lg:col-span-4">
             <OperatorCard pulse={pulse} />
           </div>
           <div className="col-span-12 lg:col-span-8">
             <Panel title="Cluster Throughput" badge={<span className="text-success">+ live</span>}>
-              <Sparkline data={spark(64, 60, 40)} h={120} color="var(--cyan)" />
+              <Sparkline data={spark(99, 64, 60, 40)} h={120} color="var(--cyan)" />
             </Panel>
           </div>
           <div className="col-span-12 lg:col-span-4">
