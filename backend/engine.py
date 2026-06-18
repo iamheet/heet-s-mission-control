@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 import os
 import itertools
+import threading
 
 try:
     import ollama
@@ -11,6 +12,7 @@ except ImportError:
 
 try:
     import google.generativeai as genai
+    from google.generativeai.types import GenerationConfig
     GEMINI_AVAILABLE = True
 except ImportError:
     print("[!] google-generativeai not found. Run: pip install google-generativeai")
@@ -24,7 +26,12 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
 GEMINI_KEYS  = [k for k in [
     os.getenv("GEMINI_API_KEY_1"),
     os.getenv("GEMINI_API_KEY_2"),
-] if k and k.strip() != "your_gemini_api_key_here"]
+] if k and k.strip() not in ("", "your_gemini_api_key_here")]
+
+MAX_INPUT_CHARS  = 500   # max user input length
+MAX_TOKENS_SHORT = 150   # gemini short response cap
+MAX_TOKENS_LONG  = 300   # ollama long response cap
+OLLAMA_TIMEOUT   = 30    # seconds
 
 COMPLEX_KEYWORDS = [
     "explain", "detail", "how does", "why", "compare", "difference",
@@ -69,14 +76,18 @@ def is_complex_query(user_input: str) -> bool:
     return len(lower) > 60 or any(kw in lower for kw in COMPLEX_KEYWORDS)
 
 
+def sanitize_input(user_input: str) -> str:
+    """Trim and cap input length to prevent unbounded consumption."""
+    return user_input.strip()[:MAX_INPUT_CHARS]
+
+
 class JarvisEngine:
     def __init__(self):
-        self.ollama_ready = False
-        self.gemini_clients = []
-
-        # Two separate round-robin pools
-        self._gemini_robin = None   # short/simple queries
-        self._ollama_robin  = None  # long/complex queries
+        self.ollama_ready    = False
+        self.gemini_clients  = []
+        self._gemini_robin   = None
+        self._ollama_robin   = None
+        self._lock           = threading.Lock()  # thread-safe rotation
 
         self._check_ollama()
         self._init_gemini()
@@ -100,7 +111,7 @@ class JarvisEngine:
 
     def _init_gemini(self):
         if not GEMINI_AVAILABLE or not GEMINI_KEYS:
-            print("[!] Gemini disabled — no keys found.")
+            print("[!] Gemini disabled — no valid keys found.")
             return
         for i, key in enumerate(GEMINI_KEYS):
             try:
@@ -108,6 +119,10 @@ class JarvisEngine:
                 client = genai.GenerativeModel(
                     model_name=GEMINI_MODEL,
                     system_instruction=SYSTEM_PROMPT,
+                    generation_config=GenerationConfig(
+                        max_output_tokens=MAX_TOKENS_SHORT,
+                        temperature=0.7,
+                    ),
                 )
                 self.gemini_clients.append(client)
                 print(f"[+] Gemini key {i+1} ready: {GEMINI_MODEL}")
@@ -115,16 +130,22 @@ class JarvisEngine:
                 print(f"[!] Gemini key {i+1} init error: {e}")
 
     def _build_pools(self):
-        # Short queries pool: gemini-key1 → gemini-key2
         if self.gemini_clients:
             self._gemini_robin = itertools.cycle(range(len(self.gemini_clients)))
             names = [f"gemini-key{i+1}" for i in range(len(self.gemini_clients))]
             print(f"[+] Short query pool: {' → '.join(names)}")
 
-        # Long queries pool: ollama-fast → ollama-smart
         if self.ollama_ready and OLLAMA_AVAILABLE:
             self._ollama_robin = itertools.cycle([MODEL_FAST, MODEL_SMART])
             print(f"[+] Long query pool: ollama-fast → ollama-smart")
+
+    def _next_gemini(self) -> int:
+        with self._lock:
+            return next(self._gemini_robin)
+
+    def _next_ollama(self) -> str:
+        with self._lock:
+            return next(self._ollama_robin)
 
     def _stream_gemini(self, client_index: int, user_input: str):
         client = self.gemini_clients[client_index]
@@ -136,7 +157,7 @@ class JarvisEngine:
         print(f"[+] Gemini key {client_index+1} complete")
 
     def _stream_ollama(self, model: str, user_input: str):
-        max_tokens = 300 if is_complex_query(user_input) else 150
+        max_tokens = MAX_TOKENS_LONG if is_complex_query(user_input) else MAX_TOKENS_SHORT
         print(f"[*] Ollama {model} (long): {user_input[:60]}")
         stream = ollama.chat(
             model=model,
@@ -145,7 +166,11 @@ class JarvisEngine:
                 {"role": "user",   "content": user_input},
             ],
             stream=True,
-            options={"num_ctx": 1024, "num_predict": max_tokens, "temperature": 0.7}
+            options={
+                "num_ctx":     1024,
+                "num_predict": max_tokens,
+                "temperature": 0.7,
+            }
         )
         for chunk in stream:
             token = chunk["message"]["content"]
@@ -154,9 +179,8 @@ class JarvisEngine:
         print(f"[+] Ollama {model} complete")
 
     def _try_gemini_pool(self, user_input: str):
-        """Try all Gemini keys in rotation, raise if all fail."""
         for _ in range(len(self.gemini_clients)):
-            idx = next(self._gemini_robin)
+            idx = self._next_gemini()
             try:
                 yield from self._stream_gemini(idx, user_input)
                 return
@@ -165,9 +189,8 @@ class JarvisEngine:
         raise RuntimeError("All Gemini keys failed")
 
     def _try_ollama_pool(self, user_input: str):
-        """Try ollama-fast then ollama-smart in rotation, raise if all fail."""
         for _ in range(2):
-            model = next(self._ollama_robin)
+            model = self._next_ollama()
             try:
                 yield from self._stream_ollama(model, user_input)
                 return
@@ -176,10 +199,15 @@ class JarvisEngine:
         raise RuntimeError("All Ollama models failed")
 
     def generate_stream(self, user_input: str):
+        # Sanitize input before hitting any LLM
+        user_input = sanitize_input(user_input)
+        if not user_input:
+            yield "Please provide a valid query."
+            return
+
         complex_q = is_complex_query(user_input)
 
         if complex_q:
-            # Long/complex → Ollama pool first, fallback to Gemini pool
             print("[~] Complex query → Ollama pool")
             if self._ollama_robin:
                 try:
@@ -194,7 +222,6 @@ class JarvisEngine:
                 except Exception as e:
                     print(f"[!] Gemini pool also exhausted: {e}")
         else:
-            # Short/simple → Gemini pool first, fallback to Ollama pool
             print("[~] Simple query → Gemini pool")
             if self._gemini_robin:
                 try:
@@ -209,7 +236,7 @@ class JarvisEngine:
                 except Exception as e:
                     print(f"[!] Ollama pool also exhausted: {e}")
 
-        yield "JARVIS simulation: Heet is a Software & DevOps Engineer specializing in AWS, Docker, and Kubernetes."
+        yield "JARVIS is temporarily unavailable. Please try again shortly."
 
 
 # Singleton
