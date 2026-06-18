@@ -38,6 +38,28 @@
   --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
 }
 
+/* ────────────────────────────────────────────────────────────────────────────
+   REGION THEME SYSTEM
+   CSS @property declarations give --rp / --rs a typed <color> syntax.
+   This enables :root transitions to interpolate them smoothly when JS
+   calls document.documentElement.style.setProperty('--rp', newColor).
+   Every element that uses var(--rp), color-mix(in oklch, var(--rp)…), etc.
+   will animate simultaneously — no JS needed per element.
+──────────────────────────────────────────────────────────────────────────── */
+
+@property --rp   { syntax: '<color>'; inherits: true; initial-value: oklch(0.78 0.16 210); }
+@property --rs   { syntax: '<color>'; inherits: true; initial-value: oklch(0.72 0.18 240); }
+@property --rcore{ syntax: '<color>'; inherits: true; initial-value: oklch(0.78 0.16 210); }
+@property --rring{ syntax: '<color>'; inherits: true; initial-value: oklch(0.72 0.18 240); }
+@property --rc0  { syntax: '<color>'; inherits: true; initial-value: oklch(0.78 0.16 210); }
+@property --rc1  { syntax: '<color>'; inherits: true; initial-value: oklch(0.70 0.22 295); }
+@property --rc2  { syntax: '<color>'; inherits: true; initial-value: oklch(0.75 0.18 155); }
+@property --rc3  { syntax: '<color>'; inherits: true; initial-value: oklch(0.80 0.17 075); }
+@property --rc4  { syntax: '<color>'; inherits: true; initial-value: oklch(0.65 0.24 025); }
+@property --rc5  { syntax: '<color>'; inherits: true; initial-value: oklch(0.78 0.16 210); }
+@property --region-bg-atmo1 { syntax: '<color>'; inherits: true; initial-value: oklch(0.25 0.10 230 / 0.40); }
+@property --region-bg-atmo2 { syntax: '<color>'; inherits: true; initial-value: oklch(0.22 0.08 260 / 0.25); }
+
 :root {
   --radius: 0.5rem;
   /* Mission Control Dark Theme */
@@ -74,51 +96,461 @@
   --sidebar-accent-foreground: oklch(0.95 0.01 240);
   --sidebar-border: oklch(0.27 0.03 260);
   --sidebar-ring: oklch(0.72 0.18 240);
+
+  /* ── Region theme CSS vars (defaults = N. Virginia / cyan) ── */
+  --rp:    oklch(0.78 0.16 210);
+  --rs:    oklch(0.72 0.18 240);
+  --rcore: oklch(0.78 0.16 210);
+  --rring: oklch(0.72 0.18 240);
+  --rc0:   oklch(0.78 0.16 210);
+  --rc1:   oklch(0.70 0.22 295);
+  --rc2:   oklch(0.75 0.18 155);
+  --rc3:   oklch(0.80 0.17 075);
+  --rc4:   oklch(0.65 0.24 025);
+  --rc5:   oklch(0.78 0.16 210);
+  --region-bg-atmo1: oklch(0.25 0.10 230 / 0.40);
+  --region-bg-atmo2: oklch(0.22 0.08 260 / 0.25);
+
+  /* ── Smooth interpolation for ALL region CSS vars ── */
+  transition:
+    --rp    0.85s cubic-bezier(0.4, 0, 0.2, 1),
+    --rs    0.85s cubic-bezier(0.4, 0, 0.2, 1),
+    --rcore 0.85s cubic-bezier(0.4, 0, 0.2, 1),
+    --rring 0.85s cubic-bezier(0.4, 0, 0.2, 1),
+    --rc0   0.85s cubic-bezier(0.4, 0, 0.2, 1),
+    --rc1   0.85s cubic-bezier(0.4, 0, 0.2, 1),
+    --rc2   0.85s cubic-bezier(0.4, 0, 0.2, 1),
+    --rc3   0.85s cubic-bezier(0.4, 0, 0.2, 1),
+    --rc4   0.85s cubic-bezier(0.4, 0, 0.2, 1),
+    --rc5   0.85s cubic-bezier(0.4, 0, 0.2, 1),
+    --region-bg-atmo1 0.85s cubic-bezier(0.4, 0, 0.2, 1),
+    --region-bg-atmo2 0.85s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .dark { color-scheme: dark; }
 
 @layer base {
   * { border-color: var(--color-border); }
-  html, body { background: var(--color-background); color: var(--color-foreground); }
+  html, body { 
+    background: var(--color-background); 
+    color: var(--color-foreground); 
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    scroll-behavior: smooth;
+  }
   body {
-    font-family: var(--font-display);
     background-image:
-      radial-gradient(ellipse at top, oklch(0.25 0.1 260 / 0.4), transparent 60%),
-      radial-gradient(ellipse at bottom right, oklch(0.3 0.15 295 / 0.25), transparent 60%),
+      radial-gradient(ellipse at top, var(--region-bg-atmo1), transparent 60%),
+      radial-gradient(ellipse at bottom right, var(--region-bg-atmo2), transparent 60%),
       linear-gradient(var(--grid-line) 1px, transparent 1px),
       linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
-    background-size: auto, auto, 48px 48px, 48px 48px;
-    background-attachment: fixed;
+    background-size: auto, auto, 56px 56px, 56px 56px;
+    /* Removed: background-attachment: fixed — causes full-page repaint on every mobile scroll frame */
+    /* Removed: transition: background-image — CSS cannot transition background-image values */
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
   }
   .font-mono { font-family: var(--font-mono); }
 }
 
-@layer utilities {
-  .glass {
-    background: linear-gradient(180deg, oklch(0.2 0.03 260 / 0.6), oklch(0.14 0.02 260 / 0.6));
-    backdrop-filter: blur(14px);
-    border: 1px solid oklch(0.35 0.05 255 / 0.4);
-    box-shadow: 0 1px 0 oklch(0.7 0.1 240 / 0.1) inset, 0 20px 60px -20px oklch(0.1 0.05 260 / 0.8);
-  }
-  .glow-cyan { box-shadow: 0 0 24px oklch(0.78 0.16 210 / 0.4), 0 0 60px oklch(0.78 0.16 210 / 0.15); }
-  .glow-purple { box-shadow: 0 0 24px oklch(0.7 0.22 295 / 0.4); }
-  .text-glow-cyan { text-shadow: 0 0 12px oklch(0.78 0.16 210 / 0.6); }
-  .scanline {
-    background-image: repeating-linear-gradient(0deg, transparent 0, transparent 2px, oklch(1 0 0 / 0.02) 2px, oklch(1 0 0 / 0.02) 3px);
-  }
-  .led { box-shadow: 0 0 8px currentColor, 0 0 2px currentColor; }
-  .aurora-1 { animation: drift1 22s ease-in-out infinite alternate; }
-  .aurora-2 { animation: drift2 28s ease-in-out infinite alternate; }
-  .aurora-3 { animation: drift3 34s ease-in-out infinite alternate; }
+/* Ensure SVG gradient stops transition with theme changes */
+svg stop { transition: stop-color var(--theme-transition, 850ms) cubic-bezier(0.4,0,0.2,1); }
+
+/* Region sweep overlay used when switching active region */
+.region-sweep {
+  --sweep-duration: var(--theme-transition, 800ms);
+  --region-sweep-opacity: var(--region-sweep-opacity, 0.95);
+  --region-sweep-easing: var(--region-sweep-easing, cubic-bezier(.22,.9,.25,1));
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 80;
+  background: linear-gradient(90deg, transparent 0%, var(--primary-12) 18%, var(--primary-28) 50%, var(--primary-12) 82%, transparent 100%);
+  filter: blur(28px) saturate(120%);
+  mix-blend-mode: screen;
+  opacity: var(--region-sweep-opacity);
+  animation: region-sweep var(--sweep-duration) var(--region-sweep-easing);
+  will-change: transform, opacity;
 }
 
-@keyframes drift1 { from { transform: translate3d(0,0,0) scale(1); } to { transform: translate3d(8vw,6vh,0) scale(1.2); } }
-@keyframes drift2 { from { transform: translate3d(0,0,0) scale(1.1); } to { transform: translate3d(-6vw,-4vh,0) scale(1); } }
+@keyframes region-sweep {
+  0% { transform: translateX(-120%); opacity: 0; }
+  8% { opacity: 0.9; }
+  50% { transform: translateX(0%); opacity: 0.95; }
+  92% { opacity: 0.9; }
+  100% { transform: translateX(120%); opacity: 0; }
+}
+
+@layer utilities {
+  /* ── Region-aware utility classes ─────────────────────────────────────
+     These consume the CSS vars and inherit their smooth transitions.
+     Use these classes instead of inline Tailwind color classes for any
+     element that should morph with the active region theme.
+  ──────────────────────────────────────────────────────────────────── */
+
+  /* Text */
+  .r-text {
+    color: var(--rp);
+    transition: color 0.85s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Borders */
+  .r-border {
+    border-color: color-mix(in oklch, var(--rp) 40%, transparent);
+    transition: border-color 0.85s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Background tint */
+  .r-bg {
+    background-color: color-mix(in oklch, var(--rp) 8%, transparent);
+    transition: background-color 0.85s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Background tint stronger */
+  .r-bg-md {
+    background-color: color-mix(in oklch, var(--rp) 15%, transparent);
+    transition: background-color 0.85s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Outer glow box-shadow */
+  .r-glow {
+    box-shadow:
+      0 0 24px color-mix(in oklch, var(--rp) 35%, transparent),
+      0 0 60px color-mix(in oklch, var(--rp) 10%, transparent);
+    transition: box-shadow 0.85s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Text glow */
+  .r-text-glow {
+    text-shadow:
+      0 0 10px color-mix(in oklch, var(--rp) 70%, transparent),
+      0 0 2px  color-mix(in oklch, var(--rp) 90%, transparent);
+    transition: text-shadow 0.85s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* LED dot */
+  .r-led {
+    background-color: var(--rp);
+    box-shadow: 0 0 8px var(--rp), 0 0 2px var(--rp);
+    transition:
+      background-color 0.85s cubic-bezier(0.4, 0, 0.2, 1),
+      box-shadow       0.85s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* SVG fill / stroke */
+  .r-fill   { fill:   var(--rp); transition: fill   0.85s cubic-bezier(0.4, 0, 0.2, 1); }
+  .r-stroke { stroke: var(--rp); transition: stroke 0.85s cubic-bezier(0.4, 0, 0.2, 1); }
+
+  /* Active state chip — border + bg + text as one class */
+  .r-chip {
+    color:            var(--rp);
+    border-color:     color-mix(in oklch, var(--rp) 40%, transparent);
+    background-color: color-mix(in oklch, var(--rp) 8%,  transparent);
+    transition:
+      color            0.85s cubic-bezier(0.4, 0, 0.2, 1),
+      border-color     0.85s cubic-bezier(0.4, 0, 0.2, 1),
+      background-color 0.85s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Progress / fill bar */
+  .r-bar {
+    background: linear-gradient(90deg, var(--rp), var(--rs));
+    transition:
+      background 0.85s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Chart stroke colors 0–5 */
+  .rc0-stroke { stroke: var(--rc0); transition: stroke 0.85s ease; }
+  .rc1-stroke { stroke: var(--rc1); transition: stroke 0.85s ease; }
+  .rc2-stroke { stroke: var(--rc2); transition: stroke 0.85s ease; }
+  .rc3-stroke { stroke: var(--rc3); transition: stroke 0.85s ease; }
+  .rc4-stroke { stroke: var(--rc4); transition: stroke 0.85s ease; }
+  .rc5-stroke { stroke: var(--rc5); transition: stroke 0.85s ease; }
+  .rc0-fill   { fill:   var(--rc0); transition: fill   0.85s ease; }
+  .rc1-fill   { fill:   var(--rc1); transition: fill   0.85s ease; }
+  .rc2-fill   { fill:   var(--rc2); transition: fill   0.85s ease; }
+  .rc3-fill   { fill:   var(--rc3); transition: fill   0.85s ease; }
+  .rc4-fill   { fill:   var(--rc4); transition: fill   0.85s ease; }
+  .rc5-fill   { fill:   var(--rc5); transition: fill   0.85s ease; }
+
+  /* ── Pre-existing classes ─────────────────────────────────────── */
+
+  .glass {
+    background: linear-gradient(135deg, oklch(0.18 0.03 260 / 0.5), oklch(0.13 0.02 260 / 0.65));
+    backdrop-filter: blur(8px);
+    border: 1px solid oklch(0.35 0.04 255 / 0.3);
+    box-shadow: 
+      0 1px 0 oklch(1 0 0 / 0.07) inset,
+      0 0 1px oklch(1 0 0 / 0.15) inset,
+      0 20px 50px -15px oklch(0.08 0.04 260 / 0.7);
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  }
+  .glass:hover {
+    border-color: color-mix(in oklch, var(--rp) 30%, oklch(0.35 0.04 255 / 0.3));
+    box-shadow: 
+      0 1px 0 oklch(1 0 0 / 0.1) inset,
+      0 0 2px color-mix(in oklch, var(--rp) 20%, transparent) inset,
+      0 25px 60px -15px oklch(0.06 0.04 260 / 0.8);
+    transition:
+      border-color     0.85s cubic-bezier(0.4, 0, 0.2, 1),
+      box-shadow       0.85s cubic-bezier(0.4, 0, 0.2, 1),
+      all              0.3s  cubic-bezier(0.25, 0.8, 0.25, 1);
+  }
+  .glow-cyan { 
+    box-shadow: 0 0 24px oklch(0.78 0.16 210 / 0.35), 0 0 60px oklch(0.78 0.16 210 / 0.1); 
+  }
+  .shadow-glow {
+    box-shadow:
+      0 0 24px color-mix(in oklch, var(--rp) 30%, transparent),
+      0 0 60px color-mix(in oklch, var(--rp) 10%, transparent);
+    transition: box-shadow 0.85s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .glow-purple { 
+    box-shadow: 0 0 24px oklch(0.7 0.22 295 / 0.35), 0 0 60px oklch(0.7 0.22 295 / 0.1); 
+  }
+  .text-glow-cyan { 
+    text-shadow: 0 0 10px oklch(0.78 0.16 210 / 0.7), 0 0 2px oklch(0.78 0.16 210 / 0.9); 
+  }
+  .text-glow-purple { 
+    text-shadow: 0 0 10px oklch(0.7 0.22 295 / 0.7), 0 0 2px oklch(0.7 0.22 295 / 0.9); 
+  }
+  .text-glow-success { 
+    text-shadow: 0 0 10px oklch(0.75 0.18 155 / 0.7), 0 0 2px oklch(0.75 0.18 155 / 0.9); 
+  }
+  .text-glow-warning { 
+    text-shadow: 0 0 10px oklch(0.8 0.17 75 / 0.7), 0 0 2px oklch(0.8 0.17 75 / 0.9); 
+  }
+  .scanline {
+    background-image: repeating-linear-gradient(0deg, transparent 0, transparent 2px, oklch(1 0 0 / 0.015) 2px, oklch(1 0 0 / 0.015) 3px);
+  }
+  .led { 
+    box-shadow: 0 0 8px currentColor, 0 0 2px currentColor; 
+  }
+  .aurora-1 { animation: drift1 26s ease-in-out infinite alternate; }
+  .aurora-2 { animation: drift2 32s ease-in-out infinite alternate; }
+  .aurora-3 { animation: drift3 38s ease-in-out infinite alternate; }
+  
+  /* Conduit lines glowing animation */
+  .conduit-flow {
+    stroke-dasharray: 8 8;
+    animation: conduitDash 20s linear infinite;
+  }
+  .conduit-flow-fast {
+    stroke-dasharray: 8 8;
+    animation: conduitDash 6s linear infinite;
+  }
+
+  /* HUD Hologram Grid Overlay */
+  .hudo-grid {
+    background-size: 30px 30px;
+    background-image: 
+      linear-gradient(to right, color-mix(in oklch, var(--rp) 3%, transparent) 1px, transparent 1px),
+      linear-gradient(to bottom, color-mix(in oklch, var(--rp) 3%, transparent) 1px, transparent 1px);
+    transition: background-image 0.85s ease;
+  }
+
+  /* Hologram vertical scanline swipe */
+  .hudo-scan {
+    animation: scanOverlay 6s linear infinite;
+  }
+}
+
+@keyframes drift1 { from { transform: translate3d(0,0,0) scale(1); } to { transform: translate3d(8vw,6vh,0) scale(1.25); } }
+@keyframes drift2 { from { transform: translate3d(0,0,0) scale(1.1); } to { transform: translate3d(-6vw,-4vh,0) scale(0.95); } }
 @keyframes drift3 { from { transform: translate3d(0,0,0) scale(1); } to { transform: translate3d(-5vw,8vh,0) scale(1.15); } }
 
-@font-face {
-  font-family: "Space Grotesk";
-  font-display: swap;
-  src: local("Space Grotesk");
+@keyframes conduitDash {
+  to { stroke-dashoffset: -320; }
+}
+
+/* ── Orbital System CSS animations (desktop only — mobile uses static snapshot) ── */
+@keyframes orbitalOuterSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@keyframes orbitalInnerSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(-360deg); }
+}
+@keyframes orbitalRingSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(-360deg); }
+}
+@keyframes heroScrollBounce {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(6px); }
+}
+@keyframes deployCursorBlink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+.deploy-cursor-blink { animation: deployCursorBlink 0.8s step-start infinite; color: var(--rp); }
+
+@keyframes aiWaveBar {
+  0%, 100% { height: 2px; }
+  50%       { height: 12px; }
+}
+.ai-wave-bar {
+  height: 2px;
+  animation: aiWaveBar 0.6s ease-in-out infinite;
+  background-color: var(--rp);
+}
+
+/* ── Jarvis Assistant CSS ─────────────────────────────────────────────────── */
+@keyframes jarvisRingPulse {
+  0%, 100% { transform: scale(1); opacity: 0.5; }
+  50%       { transform: scale(1.18); opacity: 0.15; }
+}
+@keyframes jarvisOrbFloat {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-4px); }
+}
+@keyframes jarvisListenRing {
+  from { transform: scale(1); opacity: 0.7; }
+  to   { transform: scale(1.6); opacity: 0; }
+}
+.jarvis-ring-pulse { animation: jarvisRingPulse 2s ease-in-out infinite; }
+.jarvis-orb-float  { animation: jarvisOrbFloat 3s ease-in-out infinite; }
+.jarvis-listen-ring { animation: jarvisListenRing 0.9s ease-out infinite; }
+
+@keyframes jarvisStreamCursor {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+.jarvis-stream-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 0.85em;
+  background: var(--rp);
+  margin-left: 1px;
+  vertical-align: middle;
+  animation: jarvisStreamCursor 0.7s step-start infinite;
+}
+
+@keyframes jarvisThinkDot {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
+}
+.jarvis-think-dot {
+  animation: jarvisThinkDot 1.2s ease-in-out infinite;
+}
+
+/* Mobile: keep jarvis panel readable */
+@media (max-width: 480px) {
+  #jarvis-panel {
+    right: 0.75rem;
+    bottom: 1rem;
+    width: calc(100vw - 1.5rem) !important;
+  }
+}
+/* These classes are not used on mobile (OrbitalSystemMobile is fully static),
+   but kept so desktop can use them if needed in future. */
+.orbital-outer-spin  { animation: orbitalOuterSpin linear infinite; }
+.orbital-inner-spin  { animation: orbitalInnerSpin linear infinite; }
+.orbital-ring-spin   { animation: orbitalRingSpin 12s linear infinite; }
+.hero-scroll-bounce  { animation: heroScrollBounce 2s ease-in-out infinite; }
+
+@keyframes scanOverlay {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
+}
+
+/* ── Network backdrop CSS animation (replaces framer-motion per-node pulses) ── */
+@keyframes networkPulse {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 0.9; }
+}
+
+/* ── Mobile performance optimizations ─────────────────────────────────────── */
+@media (max-width: 767px) {
+  /* Aurora hidden via JSX — belt-and-suspenders CSS fallback */
+  .aurora-1, .aurora-2, .aurora-3 { display: none !important; }
+
+  /* Strip body grid pattern: 4 gradient layers repaint on every scroll tick */
+  body {
+    background-image:
+      radial-gradient(ellipse at top, var(--region-bg-atmo1), transparent 60%),
+      radial-gradient(ellipse at bottom right, var(--region-bg-atmo2), transparent 60%);
+    background-size: auto, auto;
+  }
+
+  /* Kill the :root CSS-var transitions on mobile.
+     These 12 transitions run simultaneously on EVERY region switch and
+     force style recalc across the entire document tree each frame. */
+  :root {
+    transition: none !important;
+  }
+
+  /* Kill SVG stop-color transitions — fires on every region switch,
+     forces full SVG rasterisation on every frame during the transition */
+  svg stop { transition: none !important; }
+
+  /* Remove expensive box-shadow glows — stacked paint layers */
+  .shadow-glow, .r-glow, .glow-cyan, .glow-purple { box-shadow: none !important; }
+  .led, .r-led { box-shadow: none !important; }
+
+  /* Remove text-shadow — triggers sub-pixel AA rasterisation per frame */
+  .r-text-glow,
+  .text-glow-cyan, .text-glow-purple,
+  .text-glow-success, .text-glow-warning { text-shadow: none !important; }
+
+  /* Remove backdrop-filter from glass panels — forces a compositing layer
+     for every glass element, stacking up quickly on a long page */
+  .glass { backdrop-filter: none !important; }
+
+  /* Region sweep: remove blur filter */
+  .region-sweep { filter: none !important; }
+
+  /* Disable all CSS transitions on mobile except opacity/transform
+     (those two are compositor-only and cost nothing) */
+  .r-text, .r-border, .r-bg, .r-bg-md, .r-glow,
+  .r-text-glow, .r-led, .r-fill, .r-stroke, .r-chip, .r-bar {
+    transition: none !important;
+  }
+}
+
+/* ── Prefers Reduced Motion ────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .aurora-1, .aurora-2, .aurora-3,
+  .hudo-scan,
+  .conduit-flow, .conduit-flow-fast {
+    animation: none !important;
+  }
+  .region-sweep {
+    animation-duration: 0.001ms !important;
+  }
+  /* Respect system-level reduced motion preference for CSS transitions */
+  :root {
+    transition:
+      --rp    0.001ms,
+      --rs    0.001ms,
+      --rcore 0.001ms,
+      --rring 0.001ms,
+      --rc0   0.001ms,
+      --rc1   0.001ms,
+      --rc2   0.001ms,
+      --rc3   0.001ms,
+      --rc4   0.001ms,
+      --rc5   0.001ms,
+      --region-bg-atmo1 0.001ms,
+      --region-bg-atmo2 0.001ms !important;
+  }
+}
+
+/* Custom Webkit scrollbar for terminal/HUD panels */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: oklch(0.35 0.03 260 / 0.6);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklch, var(--rp) 50%, oklch(0.35 0.03 260));
+  transition: background 0.85s ease;
 }

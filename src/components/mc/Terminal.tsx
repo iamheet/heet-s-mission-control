@@ -1,58 +1,257 @@
 import { useEffect, useRef, useState } from "react";
 import { SectionHeader, Panel } from "./primitives";
+import { Terminal as TermIcon, Play, CornerDownLeft } from "lucide-react";
+
+const HEET_ASCII_LOGO = `
+ ██████╗ ███████╗██╗   ██╗ ██████╗ ██████╗  ██████╗
+ ██╔══██╗██╔════╝██║   ██║██╔═══██╗██╔══██╗██╔════╝
+ ██║  ██║█████╗  ██║   ██║██║   ██║██████╔╝╚█████╗ 
+ ██║  ██║██╔══╝  ╚██╗ ██╔╝██║   ██║██╔═══╝  ╚═══██╗
+ ██████╔╝███████╗ ╚████╔╝ ╚██████╔╝██║     ██████╔╝
+ ╚═════╝ ╚══════╝  ╚═══╝   ╚═════╝ ╚═╝     ╚═════╝ 
+`;
+
+const SKILLS_TABLE = `
++--------------------+------------+-------------------------------------+
+| CATEGORY / MODULE  | EXPOSURE   | TOOLS & LANGUAGES                   |
++--------------------+------------+-------------------------------------+
+| Cloud & Containers | Hands-on   | AWS EC2, Microsoft Azure, Docker,   |
+|                    |            | Kubernetes                          |
+| CI/CD & Net        | Hands-on   | GitHub Actions, Nginx, DNS          |
+| Observability      | Hands-on   | Prometheus, Grafana                 |
+| Backend & Database | Hands-on   | Node.js, Express.js, MongoDB,       |
+|                    |            | MySQL, PostgreSQL, Supabase         |
+| Frontend           | Hands-on   | React.js, Next.js                   |
+| Languages          | Hands-on   | JavaScript, TypeScript, Python,     |
+|                    |            | SQL, Bash                           |
+| Tools & APIs       | Hands-on   | Git, GitHub, Postman, VS Code,      |
+|                    |            | OpenAI API, GitHub Copilot          |
++--------------------+------------+-------------------------------------+
+`;
+
+const PROJECTS_GRID = `
++------------------+-----------------------+-----------------------------+
+| PROJECT NAME     | ENVIRONMENT           | CAPABILITIES                |
++------------------+-----------------------+-----------------------------+
+| Mission OS       | React · Framer Motion | DevOps Mission Control      |
+| CryptoNexusAI    | Next.js · OpenAI · AWS| AI crypto market analytics  |
+| Royal Stay       | Node · MongoDB · Azure| Hotel booking & reservation |
++------------------+-----------------------+-----------------------------+
+`;
 
 const RESPONSES: Record<string, string[]> = {
-  help: ["available commands:", "  help · about · skills · projects · contact · resume · monitoring · infrastructure · clear"],
-  about: [
-    "Heet Chokshi — Software & DevOps Engineer",
-    "Based in Ahmedabad, India.",
-    "Builds, operates and observes production cloud systems.",
+  help: [
+    "AVAILABLE COMMANDS:",
+    "  help           · list all available console commands",
+    "  about          · output operator profile details & ASCII art logo",
+    "  skills         · print detailed skills matrix table",
+    "  projects       · display production systems registry",
+    "  monitoring     · query Prometheus observability status logs",
+    "  infrastructure · fetch active AWS EC2 & Docker runtime statistics",
+    "  contact        · output encrypted communication uplink targets",
+    "  resume         · trigger resume PDF download gate",
+    "  clear          · wipe terminal feed cache"
   ],
-  skills: ["AWS · Docker · Kubernetes · Linux · Nginx · GitHub Actions", "Prometheus · Grafana · Node.js · Next.js · React", "MongoDB · MySQL · PostgreSQL · Supabase · OpenAI"],
-  projects: ["▸ CryptoNexusAI  — AI crypto intelligence", "▸ GrandStay      — hotel platform", "▸ LearnWithH     — edu platform (Supabase)"],
-  contact: ["email   · heet@example.com", "github  · github.com/heet", "linkedin· linkedin.com/in/heet"],
-  resume: ["resume binary located at /artifacts/heet-cv.pdf", "use [download resume] link in §10."],
-  monitoring: ["prometheus: 128 targets up", "grafana: 7 dashboards · 4 alert rules", "loki: log retention 14d"],
-  infrastructure: ["aws ec2 ap-south-1 · 3 instances", "nginx (TLS, gzip, http/2)", "docker 47 containers · 99.97% health"],
+  about: [
+    HEET_ASCII_LOGO,
+    "OPERATOR DOSSIER // HEET CHOKSHI",
+    "------------------------------------------------------------------",
+    "ROLE: Software & DevOps Engineer",
+    "LOCATION: Ahmedabad, Gujarat, India (IST)",
+    "BACKGROUND: Software & DevOps Engineer with professional experience at Softedge Infotech.",
+    "MISSION: Deploying on AWS EC2, configuring Nginx proxies, and building actions pipelines."
+  ],
+  skills: [
+    "FETCHING MODULE CAPABILITY MATRIX...",
+    SKILLS_TABLE
+  ],
+  projects: [
+    "FETCHING PRODUCTION APPLICATION VAULTS...",
+    PROJECTS_GRID
+  ],
+  monitoring: [
+    "[prometheus] scrape status: NOMINAL // 128 targets up",
+    "[grafana] alerts: stable // 4 monitoring rules active",
+    "[loki] logs pipeline: indexing 14-day retention cycle"
+  ],
+  infrastructure: [
+    "[aws] ec2 ap-south-1a: 3 instances active [vCPU Load: 0.42]",
+    "[nginx] edge proxy: TLS/SSL nominal, HTTP/2 compression ok",
+    "[docker] engine: running 47 container blocks [health: 99.97%]"
+  ],
+  contact: [
+    "COMMUNICATION LINK GATEWAYS:",
+    "  email    · iamheetchokshi@gmail.com",
+    "  github   · github.com/iamheet",
+    "  linkedin · linkedin.com/in/iamheetchokshi",
+    "  phone    · +91 90996 66950",
+    "  resume   · download cv file in Section 10"
+  ],
+  resume: [
+    "INITIATING SECURE RESUME UPLINK PROTOCOL...",
+    "Document: Heet_Chokshi_Resume.pdf",
+    "URL: /resume/Heet_Chokshi_Resume.pdf",
+    "Status: Transmitting document stream. Opening in new tab..."
+  ]
 };
+
+const COMMANDS = ["help", "about", "skills", "projects", "monitoring", "infrastructure", "contact", "resume", "clear"];
 
 export function Terminal() {
   const [lines, setLines] = useState<{ t: "in" | "out"; s: string }[]>([
-    { t: "out", s: "heet-os terminal · type 'help' to list commands" },
+    { t: "out", s: "heet-os console v2.4.1 // secure terminal gateway" },
+    { t: "out", s: "type 'help' or select a command chip below to initialize database." },
   ]);
   const [val, setVal] = useState("");
+  const [history, setHistory] = useState<string[]>([]);
+  const [historyIdx, setHistoryIdx] = useState(-1);
   const endRef = useRef<HTMLDivElement>(null);
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [lines]);
 
-  const run = (cmd: string) => {
-    const c = cmd.trim().toLowerCase();
-    if (!c) return;
-    if (c === "clear") { setLines([]); return; }
-    const out = RESPONSES[c] ?? [`command not found: ${c}`, "type 'help' for the list of commands"];
-    setLines(prev => [...prev, { t: "in", s: cmd }, ...out.map(s => ({ t: "out" as const, s }))]);
+  // Auto-scroll on logs
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [lines]);
+
+  // Listen to external Kubernetes / system event logs
+  useEffect(() => {
+    const handleLogs = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail && typeof customEvent.detail.text === "string") {
+        setLines(prev => [...prev, { t: "out", s: customEvent.detail.text }]);
+      }
+    };
+    window.addEventListener("terminal-output", handleLogs);
+    return () => window.removeEventListener("terminal-output", handleLogs);
+  }, []);
+
+  const executeCommand = (cmd: string) => {
+    const trimmed = cmd.trim();
+    if (!trimmed) return;
+    const lower = trimmed.toLowerCase();
+
+    // Save to history
+    setHistory(prev => [trimmed, ...prev.filter(h => h !== trimmed)].slice(0, 30));
+    setHistoryIdx(-1);
+
+    if (lower === "clear") {
+      setLines([]);
+      return;
+    }
+
+    if (lower === "resume") {
+      if (typeof window !== "undefined") {
+        window.open("/resume/Heet_Chokshi_Resume.pdf", "_blank");
+      }
+    }
+
+    const output = RESPONSES[lower] ?? [`command not found: ${trimmed}`, "type 'help' to review directory of commands."];
+    setLines(prev => [
+      ...prev,
+      { t: "in", s: trimmed },
+      ...output.map(s => ({ t: "out" as const, s }))
+    ]);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      if (history.length === 0) return;
+      const nextIdx = historyIdx + 1;
+      if (nextIdx < history.length) {
+        setHistoryIdx(nextIdx);
+        setVal(history[nextIdx]);
+      }
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      const prevIdx = historyIdx - 1;
+      if (prevIdx >= 0) {
+        setHistoryIdx(prevIdx);
+        setVal(history[prevIdx]);
+      } else {
+        setHistoryIdx(-1);
+        setVal("");
+      }
+    }
   };
 
   return (
     <section>
-      <SectionHeader id="terminal" kicker="// section 09" title="Operator Terminal" desc="Direct shell access. Try: about · skills · projects · monitoring · infrastructure." />
-      <Panel title="heet@mission-control:~$" badge={<span className="text-success">interactive</span>}>
-        <div className="rounded bg-black/50 border border-border/60 p-3 font-mono text-[12px] h-72 overflow-y-auto">
-          {lines.map((l, i) => (
-            <div key={i} className={l.t === "in" ? "text-cyan" : "text-foreground/85"}>
-              {l.t === "in" ? <><span className="text-muted-foreground">heet@os ~</span> $ {l.s}</> : l.s}
-            </div>
-          ))}
-          <form onSubmit={e => { e.preventDefault(); run(val); setVal(""); }} className="flex items-center gap-1 mt-1">
-            <span className="text-muted-foreground">heet@os ~</span><span className="text-cyan">$</span>
+      <SectionHeader
+        id="terminal"
+        kicker="// section 09"
+        title="Operator Terminal"
+        desc="Interactive shell environment. Run diagnostic commands to query Heet's project databases."
+      />
+
+      <Panel title="heet@mission-control:~$" badge={<span className="text-success font-mono text-[9px] uppercase font-bold tracking-widest text-glow-success select-none animate-pulse">● online</span>}>
+        {/* Terminal logs window */}
+        <div className="rounded bg-black/60 border border-border/40 p-4 font-mono text-[11.5px] h-80 overflow-y-auto flex flex-col gap-1 relative shadow-inner select-text">
+          <div className="absolute inset-0 hudo-grid opacity-5 pointer-events-none" />
+
+          {lines.map((l, i) => {
+            const isIn = l.t === "in";
+
+            // Format ASCII logo or grids differently
+            const isLogo = l.s.includes("██");
+            const isTable = l.s.includes("+-") || l.s.includes("|");
+
+            return (
+              <div
+                key={i}
+                className={`${isIn ? "r-text" : "text-foreground/90"
+                  } leading-relaxed whitespace-pre-wrap ${(isLogo || isTable) ? "text-[8px] sm:text-[10px] leading-tight font-bold font-mono overflow-x-auto select-all" : ""
+                  }`}
+              >
+                {isIn ? (
+                  <div className="select-none flex items-center gap-1.5">
+                    <span className="text-muted-foreground/60">heet@os ~</span>
+                    <span className="r-text">$</span>
+                    <span className="text-foreground font-semibold">{l.s}</span>
+                  </div>
+                ) : (
+                  l.s
+                )}
+              </div>
+            );
+          })}
+
+          {/* Terminal Input Form */}
+          <form
+            onSubmit={e => { e.preventDefault(); executeCommand(val); setVal(""); }}
+            className="flex items-center gap-1.5 mt-2 select-none"
+          >
+            <span className="text-muted-foreground/60">heet@os ~</span>
+            <span className="r-text font-bold">$</span>
             <input
-              autoFocus
               value={val}
               onChange={e => setVal(e.target.value)}
-              className="flex-1 bg-transparent outline-none text-foreground caret-cyan"
-              placeholder="type a command…"
+              onKeyDown={handleKeyDown}
+              className="flex-1 bg-transparent border-none outline-none text-foreground caret-(--rp) font-mono"
+              placeholder="type commands here (e.g. about, skills)..."
             />
+            <button type="submit" className="text-muted-foreground/45 hover:r-text p-1 rounded hover:bg-white/5 transition-colors cursor-pointer">
+              <CornerDownLeft size={12} />
+            </button>
           </form>
           <div ref={endRef} />
+        </div>
+
+        {/* Quick command tags / chips */}
+        <div className="mt-4 pt-4 border-t border-border/10 select-none">
+          <div className="text-[9px] text-muted-foreground/50 uppercase tracking-widest mb-2 font-mono flex items-center gap-1.5">
+            <TermIcon size={12} className="r-text" /> QUICK_COMMAND_HUDS
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {COMMANDS.map(cmd => (
+              <button
+                key={cmd}
+                onClick={() => executeCommand(cmd)}
+                className="flex items-center gap-1 px-3 py-1 rounded border border-border/40 hover:r-border r-bg hover:r-bg-md text-muted-foreground hover:text-foreground font-mono text-[9px] uppercase tracking-wider transition-all duration-200 cursor-pointer"
+              >
+                <Play size={8} className="r-text" /> {cmd}
+              </button>
+            ))}
+          </div>
         </div>
       </Panel>
     </section>
