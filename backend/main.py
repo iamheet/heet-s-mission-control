@@ -67,16 +67,13 @@ async def chat_endpoint(request: Request, body: ChatRequest):
     if is_rate_limited(ip):
         raise HTTPException(status_code=429, detail="Too many requests. Please slow down.")
 
-    async def generate_response():
+    def generate_response():
         try:
-            loop = asyncio.get_event_loop()
-            # Run the sync generator in a thread so it doesn't block the event loop
-            gen = jarvis_engine.generate_stream(body.message)
-            for token in gen:
+            for token in jarvis_engine.generate_stream(body.message):
                 yield token
-                await asyncio.sleep(0.005)
         except Exception as e:
-            yield f"[Backend Error]: {str(e)}"
+            print(f"[!] Stream error: {e}")
+            yield "\n[JARVIS encountered an internal error. Please try again.]"
 
     return StreamingResponse(generate_response(), media_type="text/plain")
 
