@@ -65,7 +65,7 @@ export function BootSequence({ onDone }: { onDone: () => void }) {
               animate={{ opacity: 1, scale: 1 }}
               className="mt-8 rounded-md border border-success/40 bg-success/10 p-3 font-mono text-success text-center text-glow-cyan"
             >
-              ▣ ACCESS GRANTED — WELCOME, OPERATOR
+              ▣ ACCESS GRANTED — WELCOME, RECRUITER
             </motion.div>
           )}
         </AnimatePresence>
@@ -78,10 +78,14 @@ export function BootSequence({ onDone }: { onDone: () => void }) {
             >
               <button
                 onClick={onDone}
-                className="w-full py-3.5 rounded border border-success/60 bg-success/10 text-success hover:bg-success/20 active:scale-95 transition-all duration-300 font-mono font-bold tracking-[0.2em] text-xs uppercase shadow-glow cursor-pointer"
+                className="relative w-full py-3.5 rounded border border-success/60 bg-success/10 text-success hover:bg-success/20 active:scale-95 transition-all duration-300 font-mono font-bold tracking-[0.2em] text-xs uppercase shadow-glow cursor-pointer mt-4"
                 style={{ boxShadow: "0 0 15px oklch(0.7 0.2 140 / 0.15)" }}
               >
-                INITIALIZE_SYSTEM.EXE
+                <div className="absolute -top-5 left-1/2 -translate-x-1/2 bg-success text-background px-3 py-1 rounded text-[10px] font-bold animate-bounce shadow-[0_0_15px_oklch(0.7_0.2_140/0.5)] pointer-events-none whitespace-nowrap">
+                  CLICK HERE TO ENTER
+                  <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[4px] border-r-[4px] border-t-[4px] border-transparent border-t-success" />
+                </div>
+                LOGGING INTO MUMBAI SERVER...
               </button>
             </motion.div>
           )}

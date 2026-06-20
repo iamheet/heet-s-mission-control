@@ -7,6 +7,28 @@ let audioCtx: AudioContext | null = null;
 let activeSourceNode: AudioBufferSourceNode | null = null;
 let activeUtterance: SpeechSynthesisUtterance | null = null;
 
+// ─── Speech Queue ────────────────────────────────────────────────────────────
+type QueuedUtterance = { text: string; onStart?: () => void; onEnd?: () => void; onError?: (err: any) => void };
+const speechQueue: QueuedUtterance[] = [];
+let isSpeaking = false;
+
+function processQueue() {
+  if (isSpeaking || speechQueue.length === 0) return;
+  const item = speechQueue.shift()!;
+  isSpeaking = true;
+  _speakNow(item.text, item.onStart, () => { isSpeaking = false; item.onEnd?.(); processQueue(); }, item.onError);
+}
+
+export function enqueueSpeak(text: string, onStart?: () => void, onEnd?: () => void, onError?: (err: any) => void) {
+  speechQueue.push({ text, onStart, onEnd, onError });
+  processQueue();
+}
+
+export function clearQueue() {
+  speechQueue.length = 0;
+  isSpeaking = false;
+}
+
 // Cached selected voice — set once by initVoice(), reused by all speak() calls
 let cachedVoice: SpeechSynthesisVoice | null = null;
 let voiceInitialized = false;
@@ -289,15 +311,12 @@ export function isCached(text: string): boolean {
 }
 
 /**
- * Stops all currently playing audio (Web Audio API and Web Speech synthesis)
+ * Stops all currently playing audio and clears the queue
  */
 export function stop() {
+  clearQueue();
   if (activeSourceNode) {
-    try {
-      activeSourceNode.stop();
-    } catch (e) {
-      // Already stopped or not started
-    }
+    try { activeSourceNode.stop(); } catch (e) {}
     activeSourceNode = null;
   }
   if (typeof window !== "undefined" && window.speechSynthesis) {
@@ -392,7 +411,7 @@ function speakWithSpeechSynthesis(
 
   try {
     recordTiming("speechSynthesis.speak()");
-    window.speechSynthesis.cancel();
+    // DO NOT cancel here — queue handles sequencing
 
     const spokenText = text
       .replace(/HEET[·•\-]?OS/gi, "Heet OS")
@@ -445,6 +464,43 @@ function speakWithSpeechSynthesis(
  * Synthesizes and plays the text using ElevenLabs, with automatic cache resolution
  * and automatic fallback to browser SpeechSynthesis.
  */
+// Internal: plays immediately without queueing (used by queue processor)
+function _speakNow(
+  text: string,
+  onStart?: () => void,
+  onEnd?: () => void,
+  onError?: (err: any) => void
+) {
+  const apiKey = import.meta.env.VITE_ELEVENLABS_API_KEY;
+  if (!apiKey) {
+    speakWithSpeechSynthesis(text, onStart, onEnd, onError);
+    return;
+  }
+  const normalized = normalizeText(text);
+  const cachedBuffer = audioCache.get(normalized);
+  const startPlayback = (buffer: AudioBuffer) => {
+    try {
+      const ctx = getAudioContext();
+      if (ctx.state === "suspended") ctx.resume();
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(ctx.destination);
+      source.onended = () => { if (activeSourceNode === source) { activeSourceNode = null; onEnd?.(); } };
+      activeSourceNode = source;
+      onStart?.();
+      source.start(0);
+    } catch (err) {
+      speakWithSpeechSynthesis(text, onStart, onEnd, onError);
+    }
+  };
+  if (cachedBuffer) { startPlayback(cachedBuffer); }
+  else {
+    fetchAndDecode(text)
+      .then(startPlayback)
+      .catch(() => speakWithSpeechSynthesis(text, onStart, onEnd, onError));
+  }
+}
+
 export function speak(
   text: string,
   onStart?: () => void,

@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { SectionHeader, Panel, StatusDot } from "./primitives";
 import { useState, useEffect } from "react";
 import { Activity, Users, Send, Database } from "lucide-react";
+import { useJarvisHighlight } from "@/hooks/useJarvisHighlight";
 
 interface Sys {
   name: string;
@@ -44,8 +45,9 @@ export const SYSTEMS: Sys[] = [
 ];
 
 export function Systems() {
+  const highlighted = useJarvisHighlight("systems");
   return (
-    <section>
+    <section style={highlighted ? { outline: "1.5px solid color-mix(in oklch, var(--rp) 70%, transparent)", outlineOffset: "8px", boxShadow: "0 0 20px color-mix(in oklch, var(--rp) 20%, transparent)", borderRadius: "0.75rem", transition: "all 0.4s ease" } : { transition: "all 0.4s ease" }}>
       <SectionHeader 
         id="systems" 
         kicker="// section 07" 
@@ -85,6 +87,8 @@ export function Systems() {
 }
 
 function SystemCard({ s }: { s: Sys }) {
+  const cardId = `project-${s.name.toLowerCase().replace(/\s+/g, "-")}`;
+  const highlighted = useJarvisHighlight(cardId);
   const [latency, setLatency] = useState(75);
   const [rps, setRps] = useState(25);
   const [simSpeed, setSimSpeed] = useState(1);
@@ -117,7 +121,8 @@ function SystemCard({ s }: { s: Sys }) {
   }, [simSpeed]);
 
   return (
-    <Panel 
+    <div style={highlighted ? { outline: `2px solid ${s.color}`, boxShadow: `0 0 28px color-mix(in oklch, ${s.color} 35%, transparent)`, borderRadius: "0.75rem", transition: "all 0.4s ease" } : { transition: "all 0.4s ease" }}>
+    <Panel
       title={s.name} 
       badge={
         <div className="flex items-center gap-2 sm:gap-3">
@@ -194,5 +199,6 @@ function SystemCard({ s }: { s: Sys }) {
         </div>
       </div>
     </Panel>
+    </div>
   );
 }

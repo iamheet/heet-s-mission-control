@@ -214,16 +214,16 @@ function Home() {
                   <span className="flex items-center gap-1.5 sm:gap-2"><Command size={10} /> MISSION_OS</span>
                   <span className="opacity-50">/</span>
                   <span className="font-bold flex items-center gap-1.5 sm:gap-2 r-text truncate">
-                    {activeScreen === "mission"  && <><LayoutDashboard size={10} className="shrink-0" /> MISSION_CONTROL</>}
-                    {activeScreen === "infra"    && <><Server size={10} className="shrink-0" /> INFRASTRUCTURE_PLANE</>}
+                    {activeScreen === "mission" && <><LayoutDashboard size={10} className="shrink-0" /> MISSION_CONTROL</>}
+                    {activeScreen === "infra" && <><Server size={10} className="shrink-0" /> INFRASTRUCTURE_PLANE</>}
                     {activeScreen === "projects" && <><Database size={10} className="shrink-0" /> PROJECT_SYSTEMS</>}
                     {activeScreen === "operator" && <><UserCheck size={10} className="shrink-0" /> OPERATOR_PROFILE</>}
                     {activeScreen === "terminal" && <><Activity size={10} className="shrink-0" /> TERMINAL_STATION</>}
                   </span>
                 </div>
 
-                {activeScreen === "mission"  && <MissionScreen />}
-                {activeScreen === "infra"    && <InfraScreen />}
+                {activeScreen === "mission" && <MissionScreen />}
+                {activeScreen === "infra" && <InfraScreen />}
                 {activeScreen === "projects" && <ProjectsScreen />}
                 {activeScreen === "operator" && <OperatorScreen onBriefing={() => setShowBriefing(true)} />}
                 {activeScreen === "terminal" && <TerminalScreen />}

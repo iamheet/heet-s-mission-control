@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useId } from "react";
 import { Maximize2, Minimize2, Grid } from "lucide-react";
 import { useSimulation } from "./regionTheme";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useJarvisHighlight } from "@/hooks/useJarvisHighlight";
 
 /**
  * useSeries — generates a live time-series for an observability chart.
@@ -171,8 +172,9 @@ export function Observability() {
     base: metrics.chartBases[i] ?? 50,
   }));
 
+  const highlighted = useJarvisHighlight("observe");
   return (
-    <section>
+    <section style={highlighted ? { outline: "1.5px solid color-mix(in oklch, var(--rp) 70%, transparent)", outlineOffset: "8px", boxShadow: "0 0 20px color-mix(in oklch, var(--rp) 20%, transparent)", borderRadius: "0.75rem", transition: "all 0.4s ease" } : { transition: "all 0.4s ease" }}>
       <SectionHeader 
         id="observe" 
         kicker="// section 04" 

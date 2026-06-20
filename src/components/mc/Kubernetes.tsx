@@ -2,6 +2,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { SectionHeader, Panel, StatusDot } from "./primitives";
 import { useState, useEffect } from "react";
 import { AlertCircle, Trash2, Cpu, HardDrive, RefreshCw } from "lucide-react";
+import { useJarvisHighlight } from "@/hooks/useJarvisHighlight";
 
 interface Pod {
   id: string;
@@ -141,30 +142,31 @@ export function Kubernetes() {
     dispatchTerminalLog(`[k8s] ✓ Pod ${newPodName} running. All replicas nominal.`);
   };
 
+  const highlighted = useJarvisHighlight("k8s");
   return (
-    <section>
+    <section style={highlighted ? { outline: "1.5px solid color-mix(in oklch, var(--rp) 70%, transparent)", outlineOffset: "8px", boxShadow: "0 0 20px color-mix(in oklch, var(--rp) 20%, transparent)", borderRadius: "0.75rem", transition: "all 0.4s ease" } : { transition: "all 0.4s ease" }}>
       <SectionHeader 
         id="k8s" 
-        kicker="// section 08" 
+        kicker="// section 06" 
         title="Kubernetes Operations" 
         desc="Production cluster replica map. Click any pod to inspect diagnostic stats, or terminate a container to audit self-healing scheduling." 
       />
       
-      <div className="grid lg:grid-cols-12 gap-4">
-        {/* Nodes Grid (ColSpan 8) */}
-        <div className="lg:col-span-8">
+      <div className="flex flex-col gap-4">
+        {/* Nodes Grid */}
+        <div>
           <Panel 
             title="Cluster Grid Topology // heet-prod" 
             badge={<span className="text-success flex items-center gap-1.5 font-mono text-[10px] uppercase font-bold tracking-widest text-glow-success select-none"><StatusDot /> Ready</span>}
           >
             <div className="space-y-4">
-              <div className="flex items-center justify-center gap-4 font-mono text-[10px] uppercase tracking-wider select-none bg-black/10 py-2 border border-border/20 rounded">
+              <div className="flex items-center justify-center gap-4 font-mono text-[10px] uppercase tracking-wider select-none bg-black/10 py-2 border border-border/20 rounded flex-wrap">
                 <div className="flex items-center gap-1.5 px-2.5 py-1 rounded r-bg-md border r-border r-text">Ingress Router</div>
                 <Arrow />
                 <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-purple/15 border border-purple/30 text-purple">Load Balancer Service</div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
                 {nodes.map(n => (
                   <div key={n.id} className="rounded-lg border border-border/40 bg-black/15 p-3 flex flex-col justify-between group">
                     <div className="flex items-center justify-between font-mono text-[10px] uppercase tracking-wider mb-3 select-none">
@@ -172,7 +174,7 @@ export function Kubernetes() {
                       <span className="text-success font-semibold tracking-widest text-glow-success">Ready</span>
                     </div>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    <div className="grid grid-cols-3 gap-2">
                       {n.pods.map((p, i) => {
                         const statusColor = p.status === "Running" ? "r-border r-bg-md r-text hover:r-border" : 
                                             p.status === "Terminating" ? "border-warning/50 bg-warning/10 text-warning hover:border-warning animate-pulse" :
@@ -198,8 +200,8 @@ export function Kubernetes() {
           </Panel>
         </div>
 
-        {/* Diagnostic Panel (ColSpan 4) */}
-        <div className="lg:col-span-4">
+        {/* Diagnostic Panel */}
+        <div>
           <Panel title="Replica Telemetry Diagnostics" id="k8s-diagnostics-panel">
             <AnimatePresence mode="wait">
               {selectedPod ? (

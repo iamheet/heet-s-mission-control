@@ -5,8 +5,24 @@ import { useSimulation, type RegionTheme } from "./regionTheme";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 export function Hero() {
-  const { theme, regionId } = useSimulation();
+  const { theme, regionId, simSpeed } = useSimulation();
   const isMobile = useIsMobile();
+
+  const [metrics, setMetrics] = useState(theme.metrics);
+
+  useEffect(() => {
+    setMetrics(theme.metrics);
+    const interval = Math.max(800, 2000 / simSpeed);
+    const i = setInterval(() => {
+      setMetrics((prev) => ({
+        ...theme.metrics,
+        cpu: Math.max(0, Math.min(100, theme.metrics.cpu + Math.floor(Math.random() * 7 - 3))),
+        memory: Math.max(0, Math.min(100, theme.metrics.memory + Math.floor(Math.random() * 5 - 2))),
+        latencyMs: Math.max(0, theme.metrics.latencyMs + Math.floor(Math.random() * 15 - 7)),
+      }));
+    }, interval);
+    return () => clearInterval(i);
+  }, [theme.metrics, simSpeed]);
 
   return (
     <section className="relative min-h-[96vh] flex items-center overflow-hidden pt-12">
@@ -223,7 +239,7 @@ export function Hero() {
 
               {/* Orbital System Overlay (Holographic) */}
               <div className="relative z-10 w-full h-full scale-[1.05]">
-                <OrbitalSystem theme={theme} regionId={regionId} isMobile={isMobile} />
+                <OrbitalSystem theme={theme} regionId={regionId} isMobile={isMobile} metrics={metrics} />
               </div>
 
               {/* Floating ID Tag (HUD Detail) */}
@@ -274,30 +290,30 @@ export function Hero() {
 // Renders the same visual shape as the full OrbitalSystem but as a
 // completely inert SVG: 1 gradient circle core + 2 rings + 6 hex nodes.
 // Paint cost: one-time rasterise at mount, never repaints.
+const ORBIT_R = 130;
+
 function OrbitalSystemMobile() {
   const NODES = [
-    { label: "AWS",    angle: 0 },
-    { label: "K8S",    angle: 60 },
-    { label: "DOCKER", angle: 120 },
-    { label: "IAM",    angle: 180 },
-    { label: "PROM",   angle: 240 },
-    { label: "GH",     angle: 300 },
+    { label: "AWS",    angle: -90 },
+    { label: "K8S",    angle: -30 },
+    { label: "DOCKER", angle:  30 },
+    { label: "IAM",    angle:  90 },
+    { label: "PROM",   angle: 150 },
+    { label: "GH",     angle: 210 },
   ];
   return (
     <div className="relative w-full aspect-square max-w-[550px] flex items-center justify-center select-none pointer-events-none">
-      {/* Static core glow — plain div, no blur, no animation */}
       <div
         className="absolute w-1/2 h-1/2 rounded-full"
         style={{
           background: "radial-gradient(circle, color-mix(in oklch, var(--rp) 35%, transparent) 0%, transparent 70%)",
           opacity: 0.35,
-          contain: "strict",
         }}
       />
       <svg
         viewBox="0 0 400 400"
         className="w-full h-full relative z-10"
-        style={{ contain: "strict" }}
+        overflow="visible"
       >
         <defs>
           <radialGradient id="mobileCore" cx="40%" cy="40%" r="60%">
@@ -307,47 +323,70 @@ function OrbitalSystemMobile() {
           </radialGradient>
         </defs>
 
-        {/* Two static HUD rings */}
-        <circle cx="200" cy="200" r="185" fill="none" stroke="var(--rp)" strokeWidth="0.5" strokeOpacity="0.12" strokeDasharray="2 12" />
-        <circle cx="200" cy="200" r="145" fill="none" stroke="var(--rp)" strokeWidth="0.5" strokeOpacity="0.18" strokeDasharray="80 40" />
+        {/* Static outer ring */}
+        <circle cx="200" cy="200" r="170" fill="none" stroke="var(--rp)" strokeWidth="0.5" strokeOpacity="0.12" strokeDasharray="2 12" />
 
-        {/* Six static hex nodes */}
+        {/* Rotating outer arc */}
+        <g style={{ transformOrigin: "200px 200px", animation: "orbitalOuterSpin 90s linear infinite", willChange: "transform" }}>
+          <circle cx="200" cy="200" r="170" fill="none" stroke="var(--rp)" strokeWidth="1" strokeOpacity="0.15" strokeDasharray="40 120" />
+          {[0, 90, 180, 270].map(deg => (
+            <line key={deg} x1="200" y1="30" x2="200" y2="46" stroke="var(--rp)" strokeWidth="1" strokeOpacity="0.4" transform={`rotate(${deg}, 200, 200)`} />
+          ))}
+        </g>
+
+        {/* Rotating hex frames only — no labels inside */}
+        <g style={{ transformOrigin: "200px 200px", animation: "orbitalInnerSpin 50s linear infinite", willChange: "transform" }}>
+          <circle cx="200" cy="200" r={ORBIT_R} fill="none" stroke="var(--rp)" strokeWidth="0.5" strokeOpacity="0.18" strokeDasharray="80 40" />
+          {NODES.map(({ label, angle }) => {
+            const rad = (angle * Math.PI) / 180;
+            const nx = 200 + ORBIT_R * Math.cos(rad);
+            const ny = 200 + ORBIT_R * Math.sin(rad);
+            return (
+              <g key={label} transform={`translate(${nx - 18}, ${ny - 18})`}>
+                {/* Filled backdrop for contrast */}
+                <circle cx="18" cy="18" r="16" fill="oklch(0.13 0.02 260 / 0.85)" />
+                <circle cx="18" cy="18" r="16" fill="none" stroke="var(--rp)" strokeWidth="1.2" strokeOpacity="0.5" />
+              </g>
+            );
+          })}
+        </g>
+
+        {/* Static label layer — always upright, never rotates */}
         {NODES.map(({ label, angle }) => {
           const rad = (angle * Math.PI) / 180;
-          const nx = 200 + 145 * Math.cos(rad);
-          const ny = 200 + 145 * Math.sin(rad);
+          const nx = 200 + ORBIT_R * Math.cos(rad);
+          const ny = 200 + ORBIT_R * Math.sin(rad);
           return (
-            <g key={label} transform={`translate(${nx - 20}, ${ny - 23})`}>
-              <path
-                d="M20 2L35.58 11V29L20 38L4.42 29V11L20 2Z"
-                fill="none"
-                stroke="var(--rp)"
-                strokeWidth="1.2"
-                strokeOpacity="0.35"
-              />
-              <text
-                x="20" y="56"
-                textAnchor="middle"
-                fill="var(--rp)"
-                fontSize="7"
-                fontFamily="monospace"
-                opacity="0.55"
-              >
-                {label}
-              </text>
-            </g>
+            <text
+              key={`label-${label}`}
+              x={nx}
+              y={ny + 5}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              fill="var(--rp)"
+              fontSize="11"
+              fontFamily="monospace"
+              fontWeight="bold"
+              opacity="0.9"
+            >
+              {label}
+            </text>
           );
         })}
 
-        {/* Static core circle — gradient only, no filter */}
+        {/* Core */}
         <circle cx="200" cy="200" r="44" fill="url(#mobileCore)" opacity="0.8" />
-        <circle cx="200" cy="200" r="28" fill="none" stroke="var(--rp)" strokeWidth="0.5" strokeDasharray="3 6" strokeOpacity="0.3" />
+        <circle
+          cx="200" cy="200" r="28"
+          fill="none" stroke="var(--rp)" strokeWidth="0.8" strokeDasharray="3 6" strokeOpacity="0.4"
+          style={{ transformOrigin: "200px 200px", animation: "orbitalRingSpin 12s linear infinite", willChange: "transform" }}
+        />
       </svg>
     </div>
   );
 }
 
-function OrbitalSystem({ theme, regionId, isMobile }: { theme: RegionTheme; regionId: string; isMobile: boolean }) {
+function OrbitalSystem({ theme, regionId, isMobile, metrics }: { theme: RegionTheme; regionId: string; isMobile: boolean; metrics: { cpu: number; memory: number; latencyMs: number } }) {
   const [isMounted, setIsMounted] = useState(false);
   useEffect(() => {
     setIsMounted(true);
@@ -477,9 +516,9 @@ function OrbitalSystem({ theme, regionId, isMobile }: { theme: RegionTheme; regi
         >
           <div className="flex flex-col gap-1 border-r-2 r-border pr-4">
             <div className="r-text font-bold">NODE_STATUS: ONLINE</div>
-            <div className="text-muted-foreground/60">LOAD: {theme.metrics.cpu}%</div>
-            <div className="text-muted-foreground/60">MEM: {theme.metrics.memory}%</div>
-            <div className="text-muted-foreground/60">PING: {theme.metrics.latencyMs}ms</div>
+            <div className="text-muted-foreground/60">LOAD: {metrics.cpu}%</div>
+            <div className="text-muted-foreground/60">MEM: {metrics.memory}%</div>
+            <div className="text-muted-foreground/60">PING: {metrics.latencyMs}ms</div>
           </div>
           <div className="text-[7px] uppercase tracking-widest text-muted-foreground/30">
             Authenticated as: USER_ROOT

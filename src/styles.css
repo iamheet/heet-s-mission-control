@@ -444,8 +444,7 @@ svg stop { transition: stop-color var(--theme-transition, 850ms) cubic-bezier(0.
     width: calc(100vw - 1.5rem) !important;
   }
 }
-/* These classes are not used on mobile (OrbitalSystemMobile is fully static),
-   but kept so desktop can use them if needed in future. */
+/* Used by both desktop (via Framer Motion style overrides) and mobile OrbitalSystemMobile (inline style) */
 .orbital-outer-spin  { animation: orbitalOuterSpin linear infinite; }
 .orbital-inner-spin  { animation: orbitalInnerSpin linear infinite; }
 .orbital-ring-spin   { animation: orbitalRingSpin 12s linear infinite; }

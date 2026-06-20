@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { Play, RotateCw } from "lucide-react";
 import { useSimulation } from "./regionTheme";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useJarvisHighlight } from "@/hooks/useJarvisHighlight";
 
 const STAGES = ["Git Push", "GitHub Actions", "Docker Build", "Deploy Host", "Health Check", "Production"];
 
@@ -50,7 +51,8 @@ export function Deployment() {
     "awaiting mission control payload...",
   ]);
   const [isRunning, setIsRunning] = useState(false);
-  const logsEndRef = useRef<HTMLDivElement>(null);
+  const logsContainerRef = useRef<HTMLDivElement>(null);
+  const userScrolledUpRef = useRef(false);
   const { theme, simSpeed } = useSimulation();
 
   // Listen to HEET.AI trigger event
@@ -62,14 +64,30 @@ export function Deployment() {
     return () => window.removeEventListener("trigger-deployment", handleTrigger);
   }, [isRunning, simSpeed]);
 
+  // Track if user manually scrolled up
   useEffect(() => {
-    logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = logsContainerRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+      userScrolledUpRef.current = !isAtBottom;
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // Auto-scroll only if user hasn't scrolled up
+  useEffect(() => {
+    if (!logsContainerRef.current || userScrolledUpRef.current) return;
+    const el = logsContainerRef.current;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [logs]);
 
   const triggerRelease = async () => {
     if (isRunning) return;
     setIsRunning(true);
     setCurrentStep(0);
+    userScrolledUpRef.current = false; // reset scroll lock on new run
     setLogs(["[deploy] initializing pipeline trigger...", "[git] checking workspace tree..."]);
     
     const delay = (ms: number) => new Promise((res) => setTimeout(res, ms / simSpeed));
@@ -88,8 +106,9 @@ export function Deployment() {
     setIsRunning(false);
   };
 
+  const highlighted = useJarvisHighlight("deploy");
   return (
-    <section>
+    <section style={highlighted ? { outline: "1.5px solid color-mix(in oklch, var(--rp) 70%, transparent)", outlineOffset: "8px", boxShadow: "0 0 20px color-mix(in oklch, var(--rp) 20%, transparent)", borderRadius: "0.75rem", transition: "all 0.4s ease" } : { transition: "all 0.4s ease" }}>
       <SectionHeader 
         id="deploy" 
         kicker="// section 03" 
@@ -181,41 +200,38 @@ export function Deployment() {
           </Panel>
         </div>
 
-        {/* Pipeline parameters info */}
+        {/* Release Metadata + Build Logs side-by-side on desktop */}
         <div className="lg:col-span-4">
-          <Panel title="Release Metadata Parameters">
+          <Panel title="Release Metadata">
             <div className="font-mono text-xs space-y-2">
-              <Row k="branch_head" v="main" />
-              <Row k="active_commit" v="7a3f9c1 feat: scale nginx nodes" />
-              <Row k="dns_endpoint" v="sheet-app.ap-south-1.aws" />
-              <Row k="docker_tag" v="heet/app:7a3f9c1" />
-              <Row k="uptime_target" v="99.97%" />
+              <Row k="branch_head"     v="main" />
+              <Row k="active_commit"   v="7a3f9c1 feat: scale nginx" />
+              <Row k="dns_endpoint"    v="sheet-app.ap-south-1.aws" />
+              <Row k="docker_tag"      v="heet/app:7a3f9c1" />
+              <Row k="uptime_target"   v="99.97%" />
               <Row k="release_status" v={<span className="text-success font-semibold tracking-wider">✓ NOMINAL</span>} />
             </div>
           </Panel>
         </div>
 
         {/* Dynamic Build Logs Console output */}
-        <div className="lg:col-span-12">
-          <Panel title="CI/CD Build System Output logs" badge={<span className="text-muted-foreground font-mono">tail -f build.log</span>}>
-            <div className="rounded bg-black/55 border border-border/40 p-4 font-mono text-[11px] h-60 overflow-y-auto flex flex-col gap-1 shadow-inner relative">
+        <div className="lg:col-span-8">
+          <Panel title="CI/CD Build Output" badge={<span className="text-muted-foreground font-mono">tail -f build.log</span>}>
+            <div ref={logsContainerRef} className="rounded bg-black/55 border border-border/40 p-4 font-mono text-[11px] h-60 overflow-y-auto flex flex-col gap-1 shadow-inner relative">
               <div className="absolute inset-0 hudo-grid opacity-5 pointer-events-none" />
               {logs.map((logLine, i) => {
                 const isErr = logLine.includes("[error]") || logLine.includes("[warn]");
                 const isOk = logLine.includes("[health]") || logLine.includes("✓") || logLine.includes("[OK]");
                 const textColor = isErr ? "text-warning" : isOk ? "text-success" : "text-foreground/80";
                 return (
-                  // Static div on mobile — each log line was a separate FM animation
                   <div key={i + logLine} className={`${textColor} leading-relaxed`}>
                     <span className="text-muted-foreground/45 select-none mr-2">›</span> {logLine}
                   </div>
                 );
               })}
               {isRunning && (
-                // Static cursor on mobile — FM opacity blink is a full re-render per tick
                 <span className="r-text text-sm mt-1 select-none deploy-cursor-blink">▌</span>
               )}
-              <div ref={logsEndRef} />
             </div>
           </Panel>
         </div>
@@ -226,9 +242,9 @@ export function Deployment() {
 
 function Row({ k, v }: { k: string; v: React.ReactNode }) {
   return (
-    <div className="flex flex-col sm:flex-row justify-between gap-1 sm:gap-4 border-b border-border/10 pb-1.5 last:border-b-0 last:pb-0">
-      <span className="text-muted-foreground/60 shrink-0">{k}</span>
-      <span className="text-foreground font-semibold truncate text-left sm:text-right">{v}</span>
+    <div className="flex flex-col gap-0.5 border-b border-border/10 pb-1.5 last:border-b-0 last:pb-0">
+      <span className="text-muted-foreground/60 text-[10px] uppercase tracking-wider">{k}</span>
+      <span className="text-foreground font-semibold break-all leading-snug">{v}</span>
     </div>
   );
 }

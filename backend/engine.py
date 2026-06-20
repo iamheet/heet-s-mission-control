@@ -11,18 +11,25 @@ except ImportError:
     OLLAMA_AVAILABLE = False
 
 try:
-    import google.generativeai as genai
-    from google.generativeai.types import GenerationConfig
+    from google import genai
+    from google.genai import types as genai_types
     GEMINI_AVAILABLE = True
 except ImportError:
-    print("[!] google-generativeai not found. Run: pip install google-generativeai")
+    try:
+        # Fallback: old package still installed
+        import google.generativeai as genai_legacy
+        GEMINI_AVAILABLE = False  # We won't use the old API
+        print("[!] Only old google-generativeai found. Run: pip install google-genai>=1.0.0")
+    except ImportError:
+        pass
     GEMINI_AVAILABLE = False
+    print("[!] google-genai not found. Run: pip install google-genai>=1.0.0")
 
 load_dotenv()
 
 MODEL_FAST   = os.getenv("OLLAMA_MODEL_FAST",  "llama3.2:1b")
 MODEL_SMART  = os.getenv("OLLAMA_MODEL_SMART", "llama3.2:3b")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 GEMINI_KEYS  = [k for k in [
     os.getenv("GEMINI_API_KEY_1"),
     os.getenv("GEMINI_API_KEY_2"),
@@ -104,7 +111,7 @@ def sanitize_input(user_input: str) -> str:
 class JarvisEngine:
     def __init__(self):
         self.ollama_ready   = False
-        self.gemini_clients = []
+        self.gemini_clients = []  # list of (api_key, client) tuples
         self._gemini_robin  = None
         self._ollama_fast_ready  = False
         self._ollama_smart_ready = False
@@ -136,29 +143,25 @@ class JarvisEngine:
 
     def _init_gemini(self):
         if not GEMINI_AVAILABLE:
-            print("[!] Gemini package not installed.")
+            print("[!] Gemini package not installed. Run: pip install google-genai>=1.0.0")
             return
         if not GEMINI_KEYS:
             print("[!] Gemini disabled - GEMINI_API_KEY_1/2 not set in .env")
             return
 
-        print(f"[*] Initializing Gemini with {len(GEMINI_KEYS)} key(s)...")
+        print(f"[*] Initializing Gemini ({GEMINI_MODEL}) with {len(GEMINI_KEYS)} key(s)...")
         for i, key in enumerate(GEMINI_KEYS):
             print(f"[*] Gemini key {i+1}: {key[:8]}...{key[-4:]} (len={len(key)})")
             try:
-                genai.configure(api_key=key)
-                client = genai.GenerativeModel(
-                    model_name=GEMINI_MODEL,
-                    system_instruction=SYSTEM_PROMPT,
-                    generation_config=GenerationConfig(
-                        max_output_tokens=MAX_TOKENS_SHORT,
-                        temperature=0.7,
-                    ),
+                client = genai.Client(api_key=key)
+                # Quick validation ping
+                resp = client.models.generate_content(
+                    model=GEMINI_MODEL,
+                    contents="hi",
+                    config=genai_types.GenerateContentConfig(max_output_tokens=5)
                 )
-                # Test the client with a minimal ping to verify key works
-                test = client.generate_content("hi", stream=False)
-                _ = test.text  # will raise if key is invalid
-                self.gemini_clients.append(client)
+                _ = resp.text  # raises if key/model invalid
+                self.gemini_clients.append((key, client))
                 print(f"[+] Gemini key {i+1} verified and ready: {GEMINI_MODEL}")
             except Exception as e:
                 print(f"[!] Gemini key {i+1} FAILED validation: {e}")
@@ -174,24 +177,34 @@ class JarvisEngine:
         print("\n[JARVIS] --- Routing Table ---------------------------------")
         print(f"  short   (greetings, <=40 chars)  -> {'Ollama fast (' + MODEL_FAST + ')' if self._ollama_fast_ready else 'Gemini (Ollama fast unavailable)'}")
         print(f"  medium  (info queries, 41-100)   -> {'Ollama smart (' + MODEL_SMART + ')' if self._ollama_smart_ready else 'Gemini (Ollama smart unavailable)'}")
-        print(f"  complex (deep analysis, >100)    -> {'Gemini' if self.gemini_clients else 'Ollama smart fallback'}")
+        print(f"  complex (deep analysis, >100)    -> {'Gemini (' + GEMINI_MODEL + ')' if self.gemini_clients else 'Ollama smart fallback'}")
         print(f"  Gemini keys active: {len(self.gemini_clients)}")
         print(f"  Ollama fast ready:  {self._ollama_fast_ready}")
         print(f"  Ollama smart ready: {self._ollama_smart_ready}")
         print("------------------------------------------------------------\n")
 
-    def _next_gemini(self) -> int:
+    def _next_gemini_idx(self) -> int:
         with self._lock:
             return next(self._gemini_robin)
 
-    def _stream_gemini(self, client_index: int, user_input: str):
-        client = self.gemini_clients[client_index]
-        print(f"[ROUTE] Provider=Gemini | Key={client_index+1} | Reason=short query | Input={user_input[:50]!r}")
-        response = client.generate_content(user_input, stream=True)
-        for chunk in response:
+    def _stream_gemini(self, idx: int, user_input: str):
+        key, client = self.gemini_clients[idx]
+        print(f"[ROUTE] Provider=Gemini | Key={idx+1} | Model={GEMINI_MODEL} | Input={user_input[:50]!r}")
+        stream = client.models.generate_content_stream(
+            model=GEMINI_MODEL,
+            contents=[
+                genai_types.Content(role="user", parts=[genai_types.Part(text=user_input)])
+            ],
+            config=genai_types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                max_output_tokens=MAX_TOKENS_LONG,
+                temperature=0.7,
+            )
+        )
+        for chunk in stream:
             if chunk.text:
                 yield chunk.text
-        print(f"[ROUTE] Gemini key {client_index+1} stream complete")
+        print(f"[ROUTE] Gemini key {idx+1} stream complete")
 
     def _stream_ollama(self, model: str, user_input: str, reason: str):
         max_tokens = MAX_TOKENS_LONG if model == MODEL_SMART else MAX_TOKENS_SHORT
@@ -234,7 +247,7 @@ class JarvisEngine:
                     print(f"[ROUTE] Ollama fast failed: {e} - falling back to Gemini")
 
             if self.gemini_clients:
-                idx = self._next_gemini()
+                idx = self._next_gemini_idx()
                 try:
                     yield from self._stream_gemini(idx, user_input)
                     return
@@ -251,7 +264,7 @@ class JarvisEngine:
                     print(f"[ROUTE] Ollama smart failed: {e} - falling back to Gemini")
 
             if self.gemini_clients:
-                idx = self._next_gemini()
+                idx = self._next_gemini_idx()
                 try:
                     yield from self._stream_gemini(idx, user_input)
                     return
@@ -261,7 +274,7 @@ class JarvisEngine:
         # --- COMPLEX: Gemini first, fallback Ollama smart, then Ollama fast ----
         else:
             if self.gemini_clients:
-                idx = self._next_gemini()
+                idx = self._next_gemini_idx()
                 try:
                     yield from self._stream_gemini(idx, user_input)
                     return

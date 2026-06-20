@@ -90,10 +90,31 @@ interface SimData {
 interface EngineResult {
   response: string;
   navScreen?: string;
+  scrollTo?: string;
   followUps: string[];
   topic: string;
   nextRecruiterState: RecruiterState;
 }
+
+
+interface TourState {
+  isActive: boolean;
+  step: number;
+}
+
+// Portfolio Tour Steps
+const PORTFOLIO_TOUR: { screen: string; title: string; speech: string; scrollTo?: string }[] = [
+  { screen: "mission", title: "Mission Control", speech: "We are on Mission Control, the main dashboard. The Hero section shows Heet's name and title as a Software and DevOps Engineer. On the right is a live orbital system showing his core technologies: AWS, Kubernetes, Docker, IAM, Prometheus, and GitHub." },
+  { screen: "mission", title: "Mission Control Overview", speech: "The Overview section shows real-time infrastructure telemetry including CPU load, container count, deployment success rate, and a live request throughput chart with active system alerts.", scrollTo: "overview" },
+  { screen: "mission", title: "Deployment Center", speech: "The Deployment panel visualizes Heet's CI/CD pipeline. Every git commit triggers GitHub Actions to build, test, containerize with Docker, and deploy to AWS EC2 with zero downtime.", scrollTo: "deploy" },
+  { screen: "mission", title: "Observability Center", speech: "The Observability panel is a Grafana-style real-time monitoring simulation displaying time-series graphs for CPU, memory, and network throughput, showing how Heet uses Prometheus and Grafana with alerting thresholds.", scrollTo: "observe" },
+  { screen: "infra", title: "Infrastructure Topology", speech: "Now in the Infrastructure section. The left panel shows an AWS architecture map with a Virtual Private Cloud, EC2 instances running Docker containers, Nginx reverse proxy, Route 53 DNS routing, and S3 storage.", scrollTo: "infra" },
+  { screen: "infra", title: "Kubernetes Operations", speech: "The Kubernetes panel shows a live cluster with pod health indicators, Deployments, Services, ConfigMaps, and readiness probes. This reflects Heet's actual container orchestration setup in production.", scrollTo: "k8s" },
+  { screen: "projects", title: "Production Systems", speech: "The Projects section showcases Heet's live production systems. Mission OS is this portfolio built with React and TypeScript. CryptoNexusAI is an AI cryptocurrency analytics platform on AWS EC2. Royal Stay is a hotel booking platform on Microsoft Azure.", scrollTo: "systems" },
+  { screen: "projects", title: "Mission History", speech: "The History panel shows Heet's development timeline with key milestones, technologies used, and project evolution. Each entry links to the live deployment or GitHub repository.", scrollTo: "history" },
+  { screen: "operator", title: "Technology Matrix", speech: "The Technology Matrix lists 16 tools across three categories. Infrastructure: AWS, Docker, Kubernetes, Linux, Nginx, GitHub Actions, Prometheus, Grafana. Code: Node.js, Next.js, React, OpenAI. Databases: MongoDB, MySQL, PostgreSQL, Supabase.", scrollTo: "stack" },
+  { screen: "terminal", title: "Operator Terminal and Contact", speech: "Finally, the Terminal and Contact section. The left panel is an interactive developer terminal. The right panel has Heet's email, resume download, GitHub, and LinkedIn. Heet is actively open to new Software Engineer and DevOps opportunities. That completes the full portfolio tour, feel free to ask me anything!", scrollTo: "terminal" }
+];
 
 // â”€â”€â”€ Knowledge Base (Personality Overhaul with Response Variants) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const KB: Record<string, { keywords: string[]; variants: string[]; detailed: string[] }> = {
@@ -558,7 +579,58 @@ async function jarvisEngine(
     };
   }
 
-  // 8. Fallback
+  // 8. Tour trigger
+  if (
+    lower.includes("tour") || lower.includes("walk me through") || lower.includes("guide me") ||
+    lower.includes("show me everything") || lower.includes("explain everything") ||
+    lower.includes("explain the portfolio") || lower.includes("full tour") ||
+    lower.includes("show me around")
+  ) {
+    return {
+      response: "Excellent! I will take you on a complete guided tour of this portfolio. Starting with the Mission Control dashboard. " + PORTFOLIO_TOUR[0].speech,
+      navScreen: PORTFOLIO_TOUR[0].screen,
+      scrollTo: PORTFOLIO_TOUR[0].scrollTo,
+      followUps: ["Next section \u2192", "Skip tour"],
+      topic: "tour_step_0",
+      nextRecruiterState: recruiterState
+    };
+  }
+
+  // 9. Tour step advancement
+  if (lower.includes("next section") || lower.includes("next step") || lower.includes("continue tour")) {
+    const stepMatch = lastTopic.match(/tour_step_(\d+)/);
+    const currentStep = stepMatch ? parseInt(stepMatch[1], 10) : -1;
+    const nextStep = currentStep + 1;
+    if (nextStep < PORTFOLIO_TOUR.length) {
+      const t = PORTFOLIO_TOUR[nextStep];
+      return {
+        response: "Section " + (nextStep + 1) + " of " + PORTFOLIO_TOUR.length + ": " + t.title + ". " + t.speech,
+        navScreen: t.screen,
+        scrollTo: t.scrollTo,
+        followUps: nextStep < PORTFOLIO_TOUR.length - 1 ? ["Next section \u2192", "Skip tour"] : ["Ask me anything", "Contact Heet"],
+        topic: "tour_step_" + nextStep,
+        nextRecruiterState: recruiterState
+      };
+    } else {
+      return {
+        response: "That completes the full portfolio tour! You have seen all 10 sections of Heet's portfolio. Feel free to ask me anything about his skills, projects, or experience.",
+        followUps: ["Why hire Heet?", "How to contact Heet?"],
+        topic: "tour_end",
+        nextRecruiterState: recruiterState
+      };
+    }
+  }
+
+  if (lower.includes("skip tour")) {
+    return {
+      response: "Tour skipped. Feel free to ask me anything about Heet's skills, projects, or DevOps experience.",
+      followUps: ["Who is Heet?", "Show projects", "Show skills"],
+      topic: "greeting",
+      nextRecruiterState: recruiterState
+    };
+  }
+
+  // 10. Fallback
   return {
     response: `I've registered your query. While I don't have an exact match for "${query}" in my matrix, Heet is highly skilled in AWS cloud solutions, Docker, React, and CI/CD pipelines. You can ask me about these topics, or ask to navigate to his Profile or Contact page.`,
     followUps: ["Who is Heet?", "Show skills"],
@@ -949,6 +1021,9 @@ export function JarvisAssistant({ onScreenChange, booted, voiceReady = false }: 
   const [isPythonStreaming, setIsPythonStreaming] = useState(false);
   const [isPythonBackendReady, setIsPythonBackendReady] = useState(false);
   const [recruiterState, setRecruiterState] = useState<RecruiterState>({ isActive: false, step: 0 });
+  const [tourState, setTourState] = useState<TourState>({ isActive: false, step: 0 });
+  const [showTourOffer, setShowTourOffer] = useState(false);
+  const tourStateRef = useRef<TourState>({ isActive: false, step: 0 });
 
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -1146,13 +1221,18 @@ export function JarvisAssistant({ onScreenChange, booted, voiceReady = false }: 
       let finalResponse = "";
       let result: EngineResult | null = null;
 
-      // Only use local engine for nav commands, metrics, and recruiter flow
       const lower = trimmed.toLowerCase();
-      const isNav = lower.includes("go to") || lower.includes("navigate") || lower.includes("take me") || lower.includes("switch to") || lower.includes("open ");
-      const isMetric = lower.includes("cpu") || lower.includes("latency") || lower.includes("memory") || lower.includes("health") || lower.includes("uptime") || lower.includes("containers") || lower.includes("region");
-      const isNavOrMetric = isNav || isMetric;
+      const isTourCommand =
+        lower.includes("tour") || lower.includes("next section") || lower.includes("skip tour") ||
+        lower.includes("next step") || lower.includes("continue tour") || lower.includes("walk me through") ||
+        lower.includes("guide me") || lower.includes("show me everything") || lower.includes("full tour") ||
+        lower.includes("show me around") || lower.includes("explain the portfolio");
+      const isNavCommand = (lower.includes("go to") || lower.includes("navigate") || lower.includes("take me") || lower.includes("switch to")) &&
+        (lower.includes("page") || lower.includes("screen") || lower.includes("panel") || lower.includes("tab"));
+      const isMetricQuery = /\b(cpu|latency|uptime|containers|active region|active zone)\b/.test(lower);
+      const useLocalEngine = isTourCommand || isNavCommand || isMetricQuery || currentRecruiter.isActive;
 
-      if (isPythonBackendReady && !isNavOrMetric && !currentRecruiter.isActive) {
+      if (isPythonBackendReady && !useLocalEngine) {
         try {
           setIsPythonStreaming(true);
           const backendUrl = import.meta.env.VITE_JARVIS_BACKEND_URL || "http://localhost:8000";
@@ -1161,22 +1241,17 @@ export function JarvisAssistant({ onScreenChange, booted, voiceReady = false }: 
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ message: trimmed })
           });
-
           if (!response.body) throw new Error("No response body");
           const reader = response.body.getReader();
           const decoder = new TextDecoder();
-          
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
             const chunk = decoder.decode(value);
             finalResponse += chunk;
-            
-            // Update the message in real-time
             setMessages(prev => prev.map(m => m.id === jarvisMsgId ? { ...m, text: finalResponse } : m));
             chatEndRef.current?.scrollIntoView({ behavior: "instant" });
           }
-          
           setIsPythonStreaming(false);
           result = {
             response: finalResponse,
@@ -1187,40 +1262,66 @@ export function JarvisAssistant({ onScreenChange, booted, voiceReady = false }: 
         } catch (err) {
           console.error("[Jarvis] Backend stream failed:", err);
           setIsPythonStreaming(false);
-          // Fallback to local engine
           result = await jarvisEngine(trimmed, context, currentRecruiter, emotion, lastTopic, simData);
           setMessages(prev => prev.map(m => m.id === jarvisMsgId ? { ...m, text: result!.response } : m));
         }
       } else {
-        // Use local rule-based engine (Instant)
+        // Local engine: tour, nav, metrics, recruiter
         result = await jarvisEngine(trimmed, context, currentRecruiter, emotion, lastTopic, simData);
         setMessages(prev => prev.map(m => m.id === jarvisMsgId ? { ...m, text: result!.response } : m));
       }
-
       if (result) {
-        // Append to context
         conversationContextRef.current.push({ role: "user", content: trimmed });
         conversationContextRef.current.push({ role: "assistant", content: result.response });
-        if (conversationContextRef.current.length > 10) {
-          conversationContextRef.current.shift();
-        }
-
+        if (conversationContextRef.current.length > 10) conversationContextRef.current.shift();
         lastTopicRef.current = result.topic;
         recruiterStateRef.current = result.nextRecruiterState;
         setRecruiterState(result.nextRecruiterState);
-
-        if (result.navScreen && onScreenChange) {
-          onScreenChange(result.navScreen);
-        }
-
         setFollowUps(result.followUps);
-        
-        // If we didn't use Python streaming, we use the local typewriter effect
-        if (result.topic !== "ai_chat") {
-          setIsStreaming(true);
-        }
+        if (result.topic !== "ai_chat") setIsStreaming(true);
 
-        speak(result.response);
+        const runPipeline = async () => {
+          if (result.navScreen && onScreenChange) {
+            const currentScreen = (window as any).__jarvisCurrentScreen || "mission";
+            const isSameScreen = result.navScreen === currentScreen;
+            onScreenChange(result.navScreen);
+            (window as any).__jarvisCurrentScreen = result.navScreen;
+            if (!isSameScreen) {
+              window.scrollTo({ top: 0, behavior: "instant" });
+              await new Promise(r => setTimeout(r, 400));
+            }
+          }
+          if (result.scrollTo) {
+            const el = document.getElementById(result.scrollTo);
+            if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+            window.dispatchEvent(new CustomEvent("jarvis-highlight", { detail: { id: result.scrollTo } }));
+          }
+          if (result.topic.startsWith("tour_step_")) {
+            const stepNum = parseInt(result.topic.replace("tour_step_", ""), 10);
+            const newTourState = { isActive: true, step: stepNum };
+            tourStateRef.current = newTourState;
+            setTourState(newTourState);
+            speak(result.response, undefined, () => {
+              const nextStep = stepNum + 1;
+              if (nextStep < PORTFOLIO_TOUR.length) {
+                setTimeout(() => handleUserQuery("next section"), 800);
+              } else {
+                setTimeout(() => {
+                  setTourState({ isActive: false, step: 0 });
+                  tourStateRef.current = { isActive: false, step: 0 };
+                  setTimeout(() => setIsOpen(false), 1500);
+                }, 800);
+              }
+            });
+          } else if (result.topic === "tour_end") {
+            tourStateRef.current = { isActive: false, step: 0 };
+            setTourState({ isActive: false, step: 0 });
+            speak(result.response, undefined, () => setTimeout(() => setIsOpen(false), 1500));
+          } else {
+            speak(result.response);
+          }
+        };
+        runPipeline();
       }
     },
     [addMessage, speak, onScreenChange, stopEverything, isPythonBackendReady]
@@ -1312,6 +1413,14 @@ export function JarvisAssistant({ onScreenChange, booted, voiceReady = false }: 
   useEffect(() => {
     recruiterStateRef.current = recruiterState;
   }, [recruiterState]);
+
+  useEffect(() => {
+    tourStateRef.current = tourState;
+  }, [tourState]);
+
+  useEffect(() => {
+    if (tourState.isActive) setIsOpen(true);
+  }, [tourState.isActive]);
 
   // â”€â”€ Initialize speech APIs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
@@ -1411,6 +1520,13 @@ export function JarvisAssistant({ onScreenChange, booted, voiceReady = false }: 
             setTimeout(() => {
               jarvisTTS.printTimingTable();
             }, 1000);
+            setTimeout(() => {
+              speak(
+                "Hey recruiter! Would you like me to take you on a complete guided tour of this portfolio?",
+                undefined,
+                () => setTimeout(() => setShowTourOffer(true), 300)
+              );
+            }, 200);
           }
         );
       };
@@ -1704,6 +1820,39 @@ export function JarvisAssistant({ onScreenChange, booted, voiceReady = false }: 
                     )}
                     <div ref={chatEndRef} />
                   </div>
+
+                  {/* Tour Offer */}
+                  <AnimatePresence>
+                    {showTourOffer && !tourState.isActive && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 8 }}
+                        className="px-4 py-3 border-t"
+                        style={{ borderColor: "color-mix(in oklch, var(--rp) 15%, transparent)", background: "color-mix(in oklch, var(--rp) 4%, transparent)" }}
+                      >
+                        <p className="font-mono text-[10px] text-foreground/80 mb-2.5 leading-relaxed">
+                          Would you like a <span className="r-text font-bold">full guided tour</span> of this portfolio?
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => { setShowTourOffer(false); setIsMinimized(true); handleUserQuery("give me a full tour"); }}
+                            className="flex items-center gap-1.5 px-4 py-1.5 rounded font-mono text-[10px] font-bold uppercase tracking-wider transition-all duration-200"
+                            style={{ background: "color-mix(in oklch, var(--rp) 20%, transparent)", border: "1px solid color-mix(in oklch, var(--rp) 50%, transparent)", color: "var(--rp)" }}
+                          >
+                            ✓ Yes, show me
+                          </button>
+                          <button
+                            onClick={() => { setShowTourOffer(false); setFollowUps(["Who is Heet?", "Show me the projects", "Why hire Heet?"]); }}
+                            className="px-4 py-1.5 rounded font-mono text-[10px] uppercase tracking-wider transition-all duration-200 text-muted-foreground/50 hover:text-foreground/80"
+                            style={{ border: "1px solid oklch(0.27 0.03 260 / 40%)" }}
+                          >
+                            No thanks
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
 
                   {/* Dynamic Follow-up Suggestions */}
                   <AnimatePresence>

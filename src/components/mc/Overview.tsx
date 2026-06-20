@@ -1,4 +1,5 @@
 import { Panel, Metric, SectionHeader, StatusDot, Sparkline } from "./primitives";
+import { useJarvisHighlight } from "@/hooks/useJarvisHighlight";
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { seededSpark } from "./rand";
@@ -31,7 +32,28 @@ const ALERTS_BY_REGION: Record<string, { s: string; t: string; target: string }[
 
 export function Overview() {
   const [pulse, setPulse] = useState(0);
-  const { theme, metrics, regionId, simSpeed } = useSimulation();
+  const { theme, metrics: baseMetrics, regionId, simSpeed } = useSimulation();
+
+  const [metrics, setMetrics] = useState(baseMetrics);
+
+  useEffect(() => {
+    setMetrics(baseMetrics);
+    const interval = Math.max(800, 2000 / simSpeed);
+    const i = setInterval(() => {
+      setMetrics((prev) => ({
+        ...baseMetrics,
+        cpu: Math.max(0, Math.min(100, baseMetrics.cpu + Math.floor(Math.random() * 7 - 3))),
+        memory: Math.max(0, Math.min(100, baseMetrics.memory + Math.floor(Math.random() * 5 - 2))),
+        latencyMs: Math.max(0, baseMetrics.latencyMs + Math.floor(Math.random() * 15 - 7)),
+        requestsPerMin: Math.max(0, baseMetrics.requestsPerMin + Math.floor(Math.random() * 400 - 200)),
+        containers: baseMetrics.containers + (Math.random() > 0.8 ? Math.floor(Math.random() * 3 - 1) : 0),
+        infraHealth: Math.max(0, Math.min(100, baseMetrics.infraHealth + (Math.random() * 0.1 - 0.05))),
+        deploySuccess: baseMetrics.deploySuccess, // kept stable mostly
+        probes: baseMetrics.probes,
+      }));
+    }, interval);
+    return () => clearInterval(i);
+  }, [baseMetrics, simSpeed]);
 
   useEffect(() => {
     // Pulse every 2.2s / simSpeed so the ID card beacon reacts to speed
@@ -50,13 +72,14 @@ export function Overview() {
     }
   };
 
+  const highlighted = useJarvisHighlight("overview");
   return (
-    <section className="relative">
+    <section className="relative" style={highlighted ? { outline: "1.5px solid color-mix(in oklch, var(--rp) 70%, transparent)", outlineOffset: "8px", boxShadow: "0 0 20px color-mix(in oklch, var(--rp) 20%, transparent)", borderRadius: "0.75rem", transition: "all 0.4s ease" } : { transition: "all 0.4s ease" }}>
       <NetworkBackdrop color={'var(--primary)'} />
       <div className="relative">
         <SectionHeader
           id="overview"
-          kicker="// section 01"
+          kicker="// section 02"
           title="Mission Control Overview"
           desc="Real-time operational telemetry across cloud infrastructure, deployment lines, and monitoring systems."
         />

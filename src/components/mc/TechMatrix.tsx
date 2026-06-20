@@ -2,6 +2,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { SectionHeader, Panel } from "./primitives";
 import { useState } from "react";
 import { Cpu, Terminal, Network, Star } from "lucide-react";
+import { useJarvisHighlight } from "@/hooks/useJarvisHighlight";
 
 type Tech = { 
   name: string; 
@@ -40,11 +41,12 @@ export function TechMatrix() {
 
   const filteredTech = TECH.filter(t => activeTab === "all" || t.cat === activeTab);
 
+  const highlighted = useJarvisHighlight("stack");
   return (
-    <section>
+    <section style={highlighted ? { outline: "1.5px solid color-mix(in oklch, var(--rp) 70%, transparent)", outlineOffset: "8px", boxShadow: "0 0 20px color-mix(in oklch, var(--rp) 20%, transparent)", borderRadius: "0.75rem", transition: "all 0.4s ease" } : { transition: "all 0.4s ease" }}>
       <SectionHeader 
         id="stack" 
-        kicker="// section 05" 
+        kicker="// section 09" 
         title="Technology Matrix" 
         desc="Operational tools catalog. Filter by category, or hover elements to fetch diagnostic descriptions." 
       />

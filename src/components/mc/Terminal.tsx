@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { SectionHeader, Panel } from "./primitives";
 import { Terminal as TermIcon, Play, CornerDownLeft } from "lucide-react";
+import { useJarvisHighlight } from "@/hooks/useJarvisHighlight";
 
 const HEET_ASCII_LOGO = `
  ██████╗ ███████╗██╗   ██╗ ██████╗ ██████╗  ██████╗
@@ -105,11 +106,16 @@ export function Terminal() {
   const [val, setVal] = useState("");
   const [history, setHistory] = useState<string[]>([]);
   const [historyIdx, setHistoryIdx] = useState(-1);
-  const endRef = useRef<HTMLDivElement>(null);
+  const logsContainerRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll on logs
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (!logsContainerRef.current) return;
+    const el = logsContainerRef.current;
+    const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+    if (isAtBottom) {
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    }
   }, [lines]);
 
   // Listen to external Kubernetes / system event logs
@@ -174,18 +180,19 @@ export function Terminal() {
     }
   };
 
+  const highlighted = useJarvisHighlight("terminal");
   return (
-    <section>
+    <section style={highlighted ? { outline: "1.5px solid color-mix(in oklch, var(--rp) 70%, transparent)", outlineOffset: "8px", boxShadow: "0 0 20px color-mix(in oklch, var(--rp) 20%, transparent)", borderRadius: "0.75rem", transition: "all 0.4s ease" } : { transition: "all 0.4s ease" }}>
       <SectionHeader
         id="terminal"
-        kicker="// section 09"
+        kicker="// section 10"
         title="Operator Terminal"
         desc="Interactive shell environment. Run diagnostic commands to query Heet's project databases."
       />
 
       <Panel title="heet@mission-control:~$" badge={<span className="text-success font-mono text-[9px] uppercase font-bold tracking-widest text-glow-success select-none animate-pulse">● online</span>}>
         {/* Terminal logs window */}
-        <div className="rounded bg-black/60 border border-border/40 p-4 font-mono text-[11.5px] h-80 overflow-y-auto flex flex-col gap-1 relative shadow-inner select-text">
+        <div ref={logsContainerRef} className="rounded bg-black/60 border border-border/40 p-4 font-mono text-[11.5px] h-80 overflow-y-auto flex flex-col gap-1 relative shadow-inner select-text">
           <div className="absolute inset-0 hudo-grid opacity-5 pointer-events-none" />
 
           {lines.map((l, i) => {
@@ -233,7 +240,6 @@ export function Terminal() {
               <CornerDownLeft size={12} />
             </button>
           </form>
-          <div ref={endRef} />
         </div>
 
         {/* Quick command tags / chips */}

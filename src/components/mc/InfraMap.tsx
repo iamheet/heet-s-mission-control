@@ -3,6 +3,7 @@ import { SectionHeader, StatusDot } from "./primitives";
 import { useState } from "react";
 import { Server, Shield, Globe, Cpu, Database, Activity, Terminal } from "lucide-react";
 import { useSimulation, REGION_THEMES, REGION_ORDER } from "./regionTheme";
+import { useJarvisHighlight } from "@/hooks/useJarvisHighlight";
 
 interface NodeData {
   id: string;
@@ -68,11 +69,12 @@ export function InfraMap() {
     "high-load": 'var(--primary)',
   }[theme.status];
 
+  const highlighted = useJarvisHighlight("infra");
   return (
-    <section>
+    <section style={highlighted ? { outline: "1.5px solid color-mix(in oklch, var(--rp) 70%, transparent)", outlineOffset: "8px", boxShadow: "0 0 20px color-mix(in oklch, var(--rp) 20%, transparent)", borderRadius: "0.75rem", transition: "all 0.4s ease" } : { transition: "all 0.4s ease" }}>
       <SectionHeader
         id="infra"
-        kicker="// section 02"
+        kicker="// section 05"
         title="Infrastructure Topology"
         desc="Interactive network schematic of the cloud platform. Select a region to update the operational theme across all dashboard systems."
       />

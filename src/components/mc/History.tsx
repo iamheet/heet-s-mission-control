@@ -2,6 +2,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { SectionHeader, Panel } from "./primitives";
 import { useState } from "react";
 import { Search, Terminal, Filter } from "lucide-react";
+import { useJarvisHighlight } from "@/hooks/useJarvisHighlight";
 
 interface LogLine {
   lvl: "OK" | "INFO" | "WARN";
@@ -33,11 +34,12 @@ export function History() {
     return matchesSearch && matchesLvl;
   });
 
+  const highlighted = useJarvisHighlight("history");
   return (
-    <section>
+    <section style={highlighted ? { outline: "1.5px solid color-mix(in oklch, var(--rp) 70%, transparent)", outlineOffset: "8px", boxShadow: "0 0 20px color-mix(in oklch, var(--rp) 20%, transparent)", borderRadius: "0.75rem", transition: "all 0.4s ease" } : { transition: "all 0.4s ease" }}>
       <SectionHeader 
         id="history" 
-        kicker="// section 06" 
+        kicker="// section 08" 
         title="Mission History" 
         desc="Operational chronology and achievements. Audit the journal logs using queries or level filters." 
       />
