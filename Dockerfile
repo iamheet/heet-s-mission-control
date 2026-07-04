@@ -21,6 +21,7 @@ COPY --from=builder /app/.output ./.output
 
 ENV NODE_ENV=production
 ENV PORT=3000
+ENV PROMETHEUS_URL=http://prometheus-svc:9090
 
 EXPOSE 3000
 

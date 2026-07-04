@@ -4,6 +4,9 @@ import { Mic, MicOff, X, Volume2, VolumeX, ChevronDown, Zap } from "lucide-react
 import { useSimulation } from "./regionTheme";
 import * as jarvisTTS from "./jarvisTTS";
 import { SYSTEMS } from "./Systems";
+import { getEnv, initEnv } from "@/lib/env";
+import { useClusterMetrics, type ClusterMetricsState } from "@/hooks/useClusterMetrics";
+import type { ClusterMetrics } from "@/lib/metrics.api";
 
 // â”€â”€â”€ Web Speech API type declarations (not in default TS lib) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 interface SpeechRecognitionResultItem {
@@ -71,6 +74,8 @@ interface JarvisAssistantProps {
   onScreenChange?: (screen: string) => void;
   booted?: boolean;
   voiceReady?: boolean;
+  externalOpen?: boolean;
+  onExternalOpenHandled?: () => void;
 }
 
 interface SimData {
@@ -347,7 +352,8 @@ async function jarvisEngine(
   recruiterState: RecruiterState,
   emotion: "neutral" | "frustrated" | "excited" | "curious" | "confused",
   lastTopic: string,
-  sim: SimData
+  sim: SimData,
+  liveMetrics: ClusterMetrics | null
 ): Promise<EngineResult> {
   const lower = query.toLowerCase().trim();
 
@@ -443,22 +449,54 @@ async function jarvisEngine(
   }
 
   // 3. Dynamic Telemetry / Live Metrics Queries
+  const isLive = liveMetrics !== null;
+  const liveTag = isLive ? " [LIVE]" : "";
+
   if (lower.includes("cpu") || lower.includes("processor") || lower.includes("utilization")) {
+    const cpuVal = isLive ? liveMetrics!.cpu.toFixed(1) : sim.cpu;
     return {
-      response: `The active CPU utilization in ${sim.flag} ${sim.regionName} is currently running at ${sim.cpu}%. All cores are operating within expected limits.`,
-      followUps: ["Check memory load", "What is the latency?"],
+      response: isLive
+        ? `Live cluster CPU utilization is currently at ${cpuVal}%.${liveTag}`
+        : `The active CPU utilization in ${sim.flag} ${sim.regionName} is currently running at ${cpuVal}%. All cores are operating within expected limits.`,
+      followUps: ["Check memory load", "What is the disk usage?"],
       topic: "metrics",
       nextRecruiterState: recruiterState
     };
   }
 
   if (lower.includes("memory") || lower.includes("ram") || lower.includes("consumption")) {
+    const memVal = isLive ? liveMetrics!.memory.toFixed(1) : sim.memory;
     return {
-      response: `System memory allocation in ${sim.flag} ${sim.regionName} is at ${sim.memory}% of cluster capacity, with garbage collection running optimally.`,
-      followUps: ["Check CPU load", "What is the latency?"],
+      response: isLive
+        ? `Live cluster memory usage is at ${memVal}% of total capacity.${liveTag}`
+        : `System memory allocation in ${sim.flag} ${sim.regionName} is at ${memVal}% of cluster capacity, with garbage collection running optimally.`,
+      followUps: ["Check CPU load", "What is the disk usage?"],
       topic: "metrics",
       nextRecruiterState: recruiterState
     };
+  }
+
+  if (lower.includes("disk") || lower.includes("storage") || lower.includes("filesystem")) {
+    if (isLive) {
+      return {
+        response: `Live disk utilization on the root filesystem is at ${liveMetrics!.disk.toFixed(1)}%.${liveTag}`,
+        followUps: ["Check CPU load", "Check memory load"],
+        topic: "metrics",
+        nextRecruiterState: recruiterState
+      };
+    }
+  }
+
+  if (lower.includes("network") || lower.includes("bandwidth") || lower.includes("traffic")) {
+    if (isLive) {
+      const rxMBps = (liveMetrics!.networkRxBytesPerSec / 1024 / 1024).toFixed(2);
+      return {
+        response: `Live inbound network throughput is ${rxMBps} MB/s across all interfaces.${liveTag}`,
+        followUps: ["Check CPU load", "Check disk usage"],
+        topic: "metrics",
+        nextRecruiterState: recruiterState
+      };
+    }
   }
 
   if (lower.includes("latency") || lower.includes("ping") || lower.includes("response time") || lower.includes("lag")) {
@@ -471,6 +509,16 @@ async function jarvisEngine(
   }
 
   if (lower.includes("health") || lower.includes("uptime") || (lower.includes("status") && (lower.includes("infra") || lower.includes("server") || lower.includes("system")))) {
+    if (isLive) {
+      const days = Math.floor(liveMetrics!.uptimeSeconds / 86400);
+      const hours = Math.floor((liveMetrics!.uptimeSeconds % 86400) / 3600);
+      return {
+        response: `Live cluster status: CPU ${liveMetrics!.cpu.toFixed(1)}%, Memory ${liveMetrics!.memory.toFixed(1)}%, Disk ${liveMetrics!.disk.toFixed(1)}%. Node uptime: ${days}d ${hours}h. Running ${liveMetrics!.podCount} pods across ${liveMetrics!.containerCount} containers.${liveTag}`,
+        followUps: ["Check CPU details", "Check memory details"],
+        topic: "metrics",
+        nextRecruiterState: recruiterState
+      };
+    }
     return {
       response: `Our infrastructure health is reporting at ${sim.health}% uptime. The active region ${sim.flag} ${sim.regionName} is under ${sim.status} load, operating without active alerts.`,
       followUps: ["How many containers are active?", "Check memory load"],
@@ -480,6 +528,14 @@ async function jarvisEngine(
   }
 
   if (lower.includes("container") || lower.includes("pod") || lower.includes("node") || lower.includes("probe")) {
+    if (isLive) {
+      return {
+        response: `Live cluster is running ${liveMetrics!.podCount} pods with ${liveMetrics!.containerCount} active containers.${liveTag}`,
+        followUps: ["Check CPU load", "Check system health"],
+        topic: "metrics",
+        nextRecruiterState: recruiterState
+      };
+    }
     return {
       response: `Our active Kubernetes cluster has ${sim.containers} container nodes running right now, with telemetry reporting from ${sim.probes} active monitoring probes.`,
       followUps: ["Check CPU load", "What is the latency?"],
@@ -1001,9 +1057,144 @@ function JarvisOrb({
     </button>
   );
 }
+// Computed lazily: after initEnv() runs during boot, getEnv returns runtime values.
+// In dev mode, falls back to import.meta.env.VITE_API_URL from .env.local.
+function getApiBase() {
+  const API_BASE =
+    (window as any).RUNTIME_CONFIG?.API_URL ||
+    getEnv("API_URL") ||
+    import.meta.env.VITE_API_URL ||
+    "http://localhost:8000";
+
+  console.log("Runtime API URL:", (window as any).RUNTIME_CONFIG?.API_URL || getEnv("API_URL"));
+  console.log("VITE_API_URL:", import.meta.env.VITE_API_URL);
+  console.log("API_BASE:", API_BASE);
+
+  return API_BASE;
+}
 
 // â”€â”€â”€ Main Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-export function JarvisAssistant({ onScreenChange, booted, voiceReady = false }: JarvisAssistantProps) {
+// ——— LiveMetricsWidget: mini HUD inside Jarvis panel ———————————————————————
+function LiveMetricsWidget({ metrics }: { metrics: ClusterMetricsState }) {
+  const [collapsed, setCollapsed] = useState(true);
+  const { data, isLive, lastUpdated } = metrics;
+
+  const uptimeStr = data
+    ? `${Math.floor(data.uptimeSeconds / 86400)}d ${Math.floor((data.uptimeSeconds % 86400) / 3600)}h`
+    : "--";
+
+  return (
+    <div
+      className="border-b select-none"
+      style={{
+        borderColor: "color-mix(in oklch, var(--rp) 15%, transparent)",
+        background: isLive
+          ? "color-mix(in oklch, var(--rp) 3%, transparent)"
+          : "oklch(0.08 0.01 260 / 0.5)",
+      }}
+    >
+      <button
+        onClick={() => setCollapsed((c) => !c)}
+        className="w-full flex items-center justify-between px-4 py-2 cursor-pointer"
+      >
+        <div className="flex items-center gap-2">
+          <span className="relative flex h-1.5 w-1.5">
+            {isLive && (
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ background: "oklch(0.75 0.18 155)" }} />
+            )}
+            <span
+              className="relative inline-flex rounded-full h-1.5 w-1.5"
+              style={{ background: isLive ? "oklch(0.75 0.18 155)" : "oklch(0.5 0.05 260)" }}
+            />
+          </span>
+          <span
+            className="text-[8px] font-bold uppercase tracking-[0.2em]"
+            style={{ color: isLive ? "oklch(0.75 0.18 155)" : "oklch(0.5 0.05 260)" }}
+          >
+            {isLive ? "CLUSTER LIVE" : "CLUSTER OFFLINE"}
+          </span>
+          {isLive && data && (
+            <span className="text-[8px] text-muted-foreground/40 ml-1">
+              CPU {data.cpu.toFixed(0)}% · MEM {data.memory.toFixed(0)}%
+            </span>
+          )}
+        </div>
+        <ChevronDown
+          size={10}
+          className="text-muted-foreground/40"
+          style={{
+            transform: collapsed ? "rotate(0deg)" : "rotate(180deg)",
+            transition: "transform 0.2s",
+          }}
+        />
+      </button>
+
+      <AnimatePresence>
+        {!collapsed && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="px-4 pb-3 space-y-2">
+              {isLive && data ? (
+                <>
+                  <MetricBar label="CPU" value={data.cpu} color="oklch(0.78 0.16 210)" />
+                  <MetricBar label="MEM" value={data.memory} color="oklch(0.7 0.22 295)" />
+                  <MetricBar label="DISK" value={data.disk} color="oklch(0.75 0.18 155)" />
+                  <div className="flex items-center justify-between text-[9px] font-mono pt-1">
+                    <div className="text-muted-foreground/50">
+                      PODS: <span className="text-foreground font-bold">{data.podCount}</span>
+                    </div>
+                    <div className="text-muted-foreground/50">
+                      CONTAINERS: <span className="text-foreground font-bold">{data.containerCount}</span>
+                    </div>
+                    <div className="text-muted-foreground/50">
+                      UPTIME: <span className="text-foreground font-bold">{uptimeStr}</span>
+                    </div>
+                  </div>
+                  <div className="text-[7px] text-muted-foreground/30 text-right">
+                    {lastUpdated && `Updated ${lastUpdated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`}
+                  </div>
+                </>
+              ) : (
+                <div className="text-[9px] text-muted-foreground/40 text-center py-2">
+                  Prometheus not reachable. Metrics unavailable.
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function MetricBar({ label, value, color }: { label: string; value: number; color: string }) {
+  const clamped = Math.min(100, Math.max(0, value));
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-[8px] font-bold tracking-wider text-muted-foreground/60 w-8 shrink-0">
+        {label}
+      </span>
+      <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
+        <motion.div
+          className="h-full rounded-full"
+          style={{ background: color }}
+          initial={{ width: 0 }}
+          animate={{ width: `${clamped}%` }}
+          transition={{ duration: 0.5 }}
+        />
+      </div>
+      <span className="text-[9px] font-bold tabular-nums w-10 text-right" style={{ color }}>
+        {value.toFixed(1)}%
+      </span>
+    </div>
+  );
+}
+
+export function JarvisAssistant({ onScreenChange, booted, voiceReady = false, externalOpen, onExternalOpenHandled }: JarvisAssistantProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -1035,6 +1226,9 @@ export function JarvisAssistant({ onScreenChange, booted, voiceReady = false }: 
   const recruiterStateRef = useRef<RecruiterState>({ isActive: false, step: 0 });
   const voiceStateRef = useRef<VoiceState>("idle");
   const isListeningRef = useRef(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<BlobPart[]>([]);
+  const transcriptGeneratedRef = useRef(false);
   const hasInteractedRef = useRef(false);
   const pendingSpeechRef = useRef<string | null>(null);
   const pendingOnStartRef = useRef<(() => void) | null>(null);
@@ -1044,8 +1238,14 @@ export function JarvisAssistant({ onScreenChange, booted, voiceReady = false }: 
   const sim = useSimulation();
   const simRef = useRef(sim);
 
+  // Live cluster metrics from Prometheus
+  const clusterMetrics = useClusterMetrics();
+  const clusterMetricsRef = useRef(clusterMetrics);
+
   // Initialize voice timing profiling and engine warmup
   useEffect(() => {
+    console.log("VITE_API_URL =", import.meta.env.VITE_API_URL);
+    console.log("API_BASE =", getApiBase());
     jarvisTTS.setMountTime();
     jarvisTTS.recordTiming("Component mount");
     jarvisTTS.initVoice(() => {
@@ -1054,9 +1254,9 @@ export function JarvisAssistant({ onScreenChange, booted, voiceReady = false }: 
     });
 
     // Check if Python backend is available - retry 3x to avoid mount race condition
-    const backendUrl = import.meta.env.VITE_JARVIS_BACKEND_URL || "http://localhost:8000";
-    const checkBackend = (attempts = 3, delay = 400): void => {
-      fetch(`${backendUrl}/status`)
+    const checkBackend = async (attempts = 3, delay = 400): Promise<void> => {
+      await initEnv();
+      fetch(`${getApiBase()}/status`)
         .then(res => res.json())
         .then(data => {
           if (data.ready === true) {
@@ -1139,6 +1339,7 @@ export function JarvisAssistant({ onScreenChange, booted, voiceReady = false }: 
     pendingSpeechRef.current = null;
     setVoiceState("idle");
     setIsStreaming(false);
+    window.dispatchEvent(new CustomEvent("jarvis-highlight", { detail: { id: "clear-all" } }));
   }, []);
 
   // â”€â”€ Speak function â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1218,6 +1419,8 @@ export function JarvisAssistant({ onScreenChange, booted, voiceReady = false }: 
         health: currentSim.metrics.infraHealth,
       };
 
+      const currentLiveMetrics = clusterMetricsRef.current.data;
+
       let finalResponse = "";
       let result: EngineResult | null = null;
 
@@ -1229,14 +1432,13 @@ export function JarvisAssistant({ onScreenChange, booted, voiceReady = false }: 
         lower.includes("show me around") || lower.includes("explain the portfolio");
       const isNavCommand = (lower.includes("go to") || lower.includes("navigate") || lower.includes("take me") || lower.includes("switch to")) &&
         (lower.includes("page") || lower.includes("screen") || lower.includes("panel") || lower.includes("tab"));
-      const isMetricQuery = /\b(cpu|latency|uptime|containers|active region|active zone)\b/.test(lower);
+      const isMetricQuery = /\b(cpu|memory|ram|latency|uptime|containers|pods|active region|active zone|disk|storage|network|bandwidth|health|status)\b/.test(lower);
       const useLocalEngine = isTourCommand || isNavCommand || isMetricQuery || currentRecruiter.isActive;
 
       if (isPythonBackendReady && !useLocalEngine) {
         try {
           setIsPythonStreaming(true);
-          const backendUrl = import.meta.env.VITE_JARVIS_BACKEND_URL || "http://localhost:8000";
-          const response = await fetch(`${backendUrl}/chat`, {
+          const response = await fetch(`${getApiBase()}/chat`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ message: trimmed })
@@ -1262,12 +1464,12 @@ export function JarvisAssistant({ onScreenChange, booted, voiceReady = false }: 
         } catch (err) {
           console.error("[Jarvis] Backend stream failed:", err);
           setIsPythonStreaming(false);
-          result = await jarvisEngine(trimmed, context, currentRecruiter, emotion, lastTopic, simData);
+          result = await jarvisEngine(trimmed, context, currentRecruiter, emotion, lastTopic, simData, currentLiveMetrics);
           setMessages(prev => prev.map(m => m.id === jarvisMsgId ? { ...m, text: result!.response } : m));
         }
       } else {
         // Local engine: tour, nav, metrics, recruiter
-        result = await jarvisEngine(trimmed, context, currentRecruiter, emotion, lastTopic, simData);
+        result = await jarvisEngine(trimmed, context, currentRecruiter, emotion, lastTopic, simData, currentLiveMetrics);
         setMessages(prev => prev.map(m => m.id === jarvisMsgId ? { ...m, text: result!.response } : m));
       }
       if (result) {
@@ -1302,6 +1504,7 @@ export function JarvisAssistant({ onScreenChange, booted, voiceReady = false }: 
             tourStateRef.current = newTourState;
             setTourState(newTourState);
             speak(result.response, undefined, () => {
+              window.dispatchEvent(new CustomEvent("jarvis-highlight", { detail: { id: "clear-all" } }));
               const nextStep = stepNum + 1;
               if (nextStep < PORTFOLIO_TOUR.length) {
                 setTimeout(() => handleUserQuery("next section"), 800);
@@ -1316,9 +1519,16 @@ export function JarvisAssistant({ onScreenChange, booted, voiceReady = false }: 
           } else if (result.topic === "tour_end") {
             tourStateRef.current = { isActive: false, step: 0 };
             setTourState({ isActive: false, step: 0 });
-            speak(result.response, undefined, () => setTimeout(() => setIsOpen(false), 1500));
+            speak(result.response, undefined, () => {
+              window.dispatchEvent(new CustomEvent("jarvis-highlight", { detail: { id: "clear-all" } }));
+              setTimeout(() => setIsOpen(false), 1500);
+            });
           } else {
-            speak(result.response);
+            speak(result.response, undefined, () => {
+              if (result.scrollTo) {
+                window.dispatchEvent(new CustomEvent("jarvis-highlight", { detail: { id: "clear-all" } }));
+              }
+            });
           }
         };
         runPipeline();
@@ -1335,32 +1545,100 @@ export function JarvisAssistant({ onScreenChange, booted, voiceReady = false }: 
   };
 
   // â”€â”€ Toggle microphone â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const toggleListening = useCallback(() => {
-    if (!recognitionRef.current) return;
-
+  const toggleListening = useCallback(async () => {
     if (isListeningRef.current) {
-      recognitionRef.current.stop();
+      if (recognitionRef.current) recognitionRef.current.stop();
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+        mediaRecorderRef.current.stop();
+      }
       isListeningRef.current = false;
       setVoiceState("idle");
-      setLiveTranscript("");
+      // Don't clear liveTranscript immediately so user can see what was caught
+      setTimeout(() => setLiveTranscript(""), 2000);
     } else {
       stopEverything();
+      
+      transcriptGeneratedRef.current = false;
+      audioChunksRef.current = [];
 
+      // Start MediaRecorder (ElevenLabs Fallback)
       try {
-        recognitionRef.current.start();
-        isListeningRef.current = true;
-        setVoiceState("listening");
-        setLiveTranscript("");
-      } catch {
-        // Ignored if already listening
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const mediaRecorder = new MediaRecorder(stream);
+        mediaRecorderRef.current = mediaRecorder;
+
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data.size > 0) audioChunksRef.current.push(e.data);
+        };
+
+        mediaRecorder.onstop = async () => {
+          // Clean up tracks
+          stream.getTracks().forEach(track => track.stop());
+
+          // If browser SpeechRecognition successfully generated a transcript, we don't need ElevenLabs STT
+          if (transcriptGeneratedRef.current) return;
+
+          // Otherwise, fall back to ElevenLabs STT
+          const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+          if (audioBlob.size === 0) return;
+
+          const sttKey = getEnv("ELEVENLABS_STT_KEY");
+          if (!sttKey) {
+            console.warn("[Jarvis STT] No ELEVENLABS_STT_KEY found, cannot process fallback speech.");
+            return;
+          }
+
+          setVoiceState("thinking");
+          try {
+            const formData = new FormData();
+            formData.append("file", audioBlob, "audio.webm");
+            formData.append("model_id", "scribe_v1");
+
+            const res = await fetch("https://api.elevenlabs.io/v1/speech-to-text", {
+              method: "POST",
+              headers: { "xi-api-key": sttKey },
+              body: formData,
+            });
+
+            if (!res.ok) throw new Error("ElevenLabs STT API error");
+            const data = await res.json();
+            
+            if (data.text && data.text.trim()) {
+              handleUserQuery(data.text.trim());
+            } else {
+              setVoiceState("idle");
+            }
+          } catch (err) {
+            console.error("[Jarvis STT] Fallback failed:", err);
+            setVoiceState("idle");
+          }
+        };
+
+        mediaRecorder.start();
+      } catch (err) {
+        console.warn("[Jarvis STT] MediaRecorder init failed:", err);
       }
+
+      // Start Browser SpeechRecognition (Primary)
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.start();
+        } catch {
+          // Ignored if already listening
+        }
+      }
+
+      isListeningRef.current = true;
+      setVoiceState("listening");
+      setLiveTranscript("");
     }
-  }, [stopEverything]);
+  }, [stopEverything, handleUserQuery]);
 
   // â”€â”€ Stop speaking â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const stopSpeaking = useCallback(() => {
     jarvisTTS.stop();
     setVoiceState("idle");
+    window.dispatchEvent(new CustomEvent("jarvis-highlight", { detail: { id: "clear-all" } }));
   }, []);
 
   // ——— Toggle mute —————————————————————————————————————————————————————————————
@@ -1407,6 +1685,10 @@ export function JarvisAssistant({ onScreenChange, booted, voiceReady = false }: 
   }, [sim]);
 
   useEffect(() => {
+    clusterMetricsRef.current = clusterMetrics;
+  }, [clusterMetrics]);
+
+  useEffect(() => {
     voiceStateRef.current = voiceState;
   }, [voiceState]);
 
@@ -1421,6 +1703,14 @@ export function JarvisAssistant({ onScreenChange, booted, voiceReady = false }: 
   useEffect(() => {
     if (tourState.isActive) setIsOpen(true);
   }, [tourState.isActive]);
+
+  useEffect(() => {
+    if (externalOpen) {
+      setIsOpen(true);
+      setIsMinimized(false);
+      onExternalOpenHandled?.();
+    }
+  }, [externalOpen, onExternalOpenHandled]);
 
   // â”€â”€ Initialize speech APIs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
@@ -1451,6 +1741,7 @@ export function JarvisAssistant({ onScreenChange, booted, voiceReady = false }: 
       setLiveTranscript(interim || final);
       if (final) {
         setLiveTranscript("");
+        transcriptGeneratedRef.current = true;
         handleUserQuery(final.trim());
       }
     };
@@ -1586,7 +1877,7 @@ export function JarvisAssistant({ onScreenChange, booted, voiceReady = false }: 
         </AnimatePresence>
       </div>
 
-      {/* â”€â”€ Main Chat Panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ––– Main Chat Panel ––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––– */}
       <AnimatePresence>
         {isOpen && (
           <motion.div
@@ -1667,6 +1958,7 @@ export function JarvisAssistant({ onScreenChange, booted, voiceReady = false }: 
                       jarvisTTS.stop();
                       setIsOpen(false);
                       setVoiceState("idle");
+                      window.dispatchEvent(new CustomEvent("jarvis-highlight", { detail: { id: "clear-all" } }));
                     }}
                     title="Close"
                     className="p-1.5 rounded hover:bg-white/5 transition-colors text-muted-foreground/60 hover:text-destructive"
@@ -1679,7 +1971,10 @@ export function JarvisAssistant({ onScreenChange, booted, voiceReady = false }: 
               {/* Body */}
               {!isMinimized && (
                 <div className="relative z-10 flex flex-col flex-1 overflow-hidden" style={{ minHeight: 0 }}>
-                  
+
+                  {/* Live Cluster Metrics Widget */}
+                  <LiveMetricsWidget metrics={clusterMetrics} />
+
                   {/* Voice State Banner */}
                   <AnimatePresence>
                     {voiceState !== "idle" && (
