@@ -11,8 +11,15 @@ export function useJarvisHighlight(id: string): boolean {
   useEffect(() => {
     const handler = (e: Event) => {
       const { id: targetId, active: isActive } = (e as CustomEvent).detail;
+      const isEventActivating = isActive !== false;
+
       if (targetId === id) {
-        setActive(isActive !== false);
+        setActive(isEventActivating);
+      } else if (targetId === "clear-all") {
+        setActive(false);
+      } else if (isEventActivating) {
+        // If another section is being highlighted, turn this one off
+        setActive(false);
       }
     };
     window.addEventListener("jarvis-highlight", handler);

@@ -2,8 +2,21 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { X, ChevronRight, Terminal, Send } from "lucide-react";
 
-const BACKEND_URL = "http://localhost:8000";
+import { getEnv, initEnv } from "@/lib/env";
 
+function getApiBase() {
+  const API_BASE =
+    (window as any).RUNTIME_CONFIG?.API_URL ||
+    getEnv("API_URL") ||
+    import.meta.env.VITE_API_URL ||
+    "http://localhost:8000";
+
+  console.log("Runtime API URL:", (window as any).RUNTIME_CONFIG?.API_URL || getEnv("API_URL"));
+  console.log("VITE_API_URL:", import.meta.env.VITE_API_URL);
+  console.log("API_BASE:", API_BASE);
+
+  return API_BASE;
+}
 interface Msg {
   sender: "jarvis" | "user";
   text: string;
@@ -190,10 +203,12 @@ export function MissionAI() {
 
   // Check if backend is available on mount and when panel opens
   useEffect(() => {
-    const check = () =>
-      fetch(`${BACKEND_URL}/status`)
+    const check = async () => {
+      await initEnv();
+      fetch(`${getApiBase()}/status`)
         .then(r => { if (r.ok) setBackendUp(true); else setBackendUp(false); })
         .catch(() => setBackendUp(false));
+    };
     check();
   }, [isOpen]);
 
@@ -315,7 +330,7 @@ export function MissionAI() {
     setStreamText("");
 
     try {
-      const res = await fetch(`${BACKEND_URL}/chat`, {
+      const res = await fetch(`${getApiBase()}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: question }),

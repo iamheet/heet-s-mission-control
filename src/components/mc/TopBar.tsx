@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Cpu, Globe, Sliders, ChevronDown, FileDown } from "lucide-react";
+import { Cpu, Globe, Sliders, ChevronDown, FileDown, Sparkles } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { Logo } from "./Logo";
 import { useSimulation, REGION_THEMES, REGION_ORDER, type SimSpeed } from "./regionTheme";
 
@@ -139,6 +140,30 @@ export function TopBar({ activeScreen, onScreenChange }: TopBarProps) {
 
         {/* Right: Resume + HUD Controls + Status + Time */}
         <div className="flex items-center gap-2 sm:gap-4">
+          {/* JARVIS Button */}
+          <Link
+            to="/mission-os"
+            className="relative flex items-center gap-1.5 rounded border px-2 sm:px-3 py-1.5 text-[9px] sm:text-[10px] font-mono font-bold uppercase tracking-widest transition-all duration-300 overflow-hidden group shrink-0"
+            style={{
+              borderColor: "color-mix(in oklch, var(--rp) 50%, transparent)",
+              background: "color-mix(in oklch, var(--rp) 8%, transparent)",
+              color: "var(--rp)",
+              boxShadow: "0 0 12px color-mix(in oklch, var(--rp) 20%, transparent)",
+            }}
+            onMouseEnter={e => {
+              (e.currentTarget as HTMLAnchorElement).style.background = "color-mix(in oklch, var(--rp) 18%, transparent)";
+              (e.currentTarget as HTMLAnchorElement).style.boxShadow = "0 0 20px color-mix(in oklch, var(--rp) 40%, transparent)";
+            }}
+            onMouseLeave={e => {
+              (e.currentTarget as HTMLAnchorElement).style.background = "color-mix(in oklch, var(--rp) 8%, transparent)";
+              (e.currentTarget as HTMLAnchorElement).style.boxShadow = "0 0 12px color-mix(in oklch, var(--rp) 20%, transparent)";
+            }}
+          >
+            <span className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300" style={{ background: "linear-gradient(90deg, transparent, color-mix(in oklch, var(--rp) 10%, transparent), transparent)" }} />
+            <Sparkles size={11} className="animate-pulse" />
+            <span className="hidden sm:inline">JARVIS</span>
+          </Link>
+
           {/* Resume Download */}
           <a
             href="/resume/Heet_Chokshi_Resume.pdf"

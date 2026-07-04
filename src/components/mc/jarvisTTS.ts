@@ -1,3 +1,5 @@
+import { getEnv } from "@/lib/env";
+
 const DEFAULT_VOICE_ID = "pNInz6obpgDQGcFmaJgB"; // Adam (ElevenLabs preset)
 
 // In-memory cache for decoded AudioBuffers
@@ -68,7 +70,8 @@ export function initVoice(onReady: () => void): Promise<string | null> {
   recordTiming("Voice initialization start");
 
   // Check if ElevenLabs is configured (API Key present)
-  const apiKey = import.meta.env.VITE_ELEVENLABS_API_KEY;
+  // Check if ElevenLabs is configured (API Key present)
+  const apiKey = getEnv("ELEVENLABS_TTS_KEY_1") || getEnv("ELEVENLABS_TTS_KEY_2");
   if (apiKey) {
     recordTiming("ElevenLabs API Key detected. Initializing Web Audio API context.");
     try {
@@ -79,6 +82,21 @@ export function initVoice(onReady: () => void): Promise<string | null> {
     } catch (e) {
       console.warn("[JarvisTTS] AudioContext warmup warning:", e);
     }
+
+    // Set up global user gesture listeners to unlock AudioContext on mobile
+    if (typeof window !== "undefined") {
+      const unlock = () => {
+        const ctx = getAudioContext();
+        if (ctx.state === "suspended") ctx.resume();
+        window.removeEventListener("click", unlock);
+        window.removeEventListener("touchstart", unlock);
+        window.removeEventListener("pointerdown", unlock);
+      };
+      window.addEventListener("click", unlock, { passive: true });
+      window.addEventListener("touchstart", unlock, { passive: true });
+      window.addEventListener("pointerdown", unlock, { passive: true });
+    }
+
     recordTiming("Voices loaded (ElevenLabs)");
     recordTiming("Speech warmup complete (ElevenLabs)");
     voiceInitialized = true;
@@ -326,62 +344,126 @@ export function stop() {
 }
 
 /**
+ * TTS Cooldown Cache: Tracks keys that failed (e.g. quota exceeded).
+ * key -> timestamp of failure.
+ */
+const failedKeys = new Map<string, number>();
+const COOLDOWN_MS = 15 * 60 * 1000; // 15 minutes
+
+/**
  * Helper to fetch, decode, and cache speech from ElevenLabs
+ * Supports automatic 9-tier key rotation with a 15-minute cooldown.
  */
 async function fetchAndDecode(text: string): Promise<AudioBuffer> {
-  const apiKey = import.meta.env.VITE_ELEVENLABS_API_KEY;
-  const voiceId = import.meta.env.VITE_ELEVENLABS_VOICE_ID || DEFAULT_VOICE_ID;
+  const allKeys = [
+    getEnv("ELEVENLABS_TTS_KEY_1"),
+    getEnv("ELEVENLABS_TTS_KEY_2"),
+    getEnv("ELEVENLABS_TTS_KEY_3"),
+    getEnv("ELEVENLABS_TTS_KEY_4"),
+    getEnv("ELEVENLABS_TTS_KEY_5"),
+    getEnv("ELEVENLABS_TTS_KEY_6"),
+    getEnv("ELEVENLABS_TTS_KEY_7"),
+    getEnv("ELEVENLABS_TTS_KEY_8"),
+    getEnv("ELEVENLABS_TTS_KEY_9"),
+    getEnv("ELEVENLABS_TTS_KEY_10"),
+  ].filter(Boolean) as string[];
 
-  if (!apiKey) {
-    throw new Error("VITE_ELEVENLABS_API_KEY is not defined.");
+  if (allKeys.length === 0) {
+    throw new Error("No ElevenLabs TTS keys configured.");
   }
 
+  const voiceId = getEnv("ELEVENLABS_VOICE_ID") || DEFAULT_VOICE_ID;
   const normalized = normalizeText(text);
   const cached = audioCache.get(normalized);
   if (cached) return cached;
 
-  console.log(`[JarvisTTS] Fetching from ElevenLabs: "${text.substring(0, 30)}..."`);
-
-  const response = await fetch(
-    `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream?output_format=mp3_44100_128`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "xi-api-key": apiKey,
-      },
-      body: JSON.stringify({
-        text: text,
-        model_id: "eleven_flash_v2_5",
-        voice_settings: {
-          stability: 0.5,
-          similarity_boost: 0.75,
-        },
-      }),
+  const now = Date.now();
+  
+  // Filter out keys that are in cooldown
+  const keys = allKeys.filter(k => {
+    const failedAt = failedKeys.get(k);
+    if (!failedAt) return true;
+    if (now - failedAt > COOLDOWN_MS) {
+      failedKeys.delete(k); // cooldown expired
+      return true;
     }
-  );
+    return false;
+  });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`ElevenLabs API returned ${response.status}: ${errorText}`);
+  if (keys.length === 0) {
+    throw new Error("All available ElevenLabs TTS keys are currently in cooldown.");
   }
 
-  const arrayBuffer = await response.arrayBuffer();
-  const ctx = getAudioContext();
-  
-  // decodeAudioData returns a promise in modern browsers
-  const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-  audioCache.set(normalized, audioBuffer);
-  
-  console.log(`[JarvisTTS] Successfully decoded & cached: "${text.substring(0, 30)}..."`);
-  return audioBuffer;
+  for (let i = 0; i < keys.length; i++) {
+    const key = keys[i];
+    const keyIndex = allKeys.indexOf(key) + 1; // 1-indexed for logging
+    console.log(`[TTS] Using key #${keyIndex} for: "${text.substring(0, 30)}..."`);
+
+    try {
+      const response = await fetch(
+        `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream?output_format=mp3_44100_128`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "xi-api-key": key,
+          },
+          body: JSON.stringify({
+            text: text,
+            model_id: "eleven_flash_v2_5",
+            voice_settings: {
+              stability: 0.5,
+              similarity_boost: 0.75,
+            },
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        failedKeys.set(key, Date.now()); // Mark key as failed
+        
+        if (i < keys.length - 1) {
+          const nextKeyIndex = allKeys.indexOf(keys[i + 1]) + 1;
+          console.warn(`[TTS] Key #${keyIndex} failed (${response.status}) – switching to key #${nextKeyIndex}`);
+          continue;
+        }
+        
+        console.warn(`[TTS] All ElevenLabs keys unavailable – using SpeechSynthesis fallback`);
+        throw new Error(`ElevenLabs API returned ${response.status}: ${errorText}`);
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      const ctx = getAudioContext();
+      // Use standard Promise wrapper for decodeAudioData to support Safari
+      const audioBuffer = await new Promise<AudioBuffer>((resolve, reject) => {
+        ctx.decodeAudioData(arrayBuffer, resolve, reject);
+      });
+      
+      audioCache.set(normalized, audioBuffer);
+      return audioBuffer;
+    } catch (err) {
+      // Mark network errors as failures too
+      failedKeys.set(key, Date.now());
+      
+      if (i < keys.length - 1) {
+        const nextKeyIndex = allKeys.indexOf(keys[i + 1]) + 1;
+        console.warn(`[TTS] Key #${keyIndex} failed (Network/Other) – switching to key #${nextKeyIndex}`);
+        continue;
+      }
+      console.warn(`[TTS] All ElevenLabs keys unavailable – using SpeechSynthesis fallback`);
+      throw err;
+    }
+  }
+
+  throw new Error("Unexpected failure in fetchAndDecode");
 }
 
 /**
  * Preloads the greeting message during boot sequence
  */
 export async function preloadGreeting(text: string): Promise<void> {
-  const apiKey = import.meta.env.VITE_ELEVENLABS_API_KEY;
+  const apiKey = getEnv("ELEVENLABS_TTS_KEY_1") || getEnv("ELEVENLABS_TTS_KEY_2");
   if (!apiKey) {
     console.warn("[JarvisTTS] Missing ElevenLabs API key, preloading skipped. Falling back to browser SpeechSynthesis.");
     return;
@@ -471,7 +553,7 @@ function _speakNow(
   onEnd?: () => void,
   onError?: (err: any) => void
 ) {
-  const apiKey = import.meta.env.VITE_ELEVENLABS_API_KEY;
+  const apiKey = getEnv("ELEVENLABS_TTS_KEY_1") || getEnv("ELEVENLABS_TTS_KEY_2");
   if (!apiKey) {
     speakWithSpeechSynthesis(text, onStart, onEnd, onError);
     return;
@@ -509,7 +591,7 @@ export function speak(
 ) {
   stop();
 
-  const apiKey = import.meta.env.VITE_ELEVENLABS_API_KEY;
+  const apiKey = getEnv("ELEVENLABS_TTS_KEY_1") || getEnv("ELEVENLABS_TTS_KEY_2");
 
   // Fallback if no key is configured
   if (!apiKey) {

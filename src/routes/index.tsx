@@ -145,11 +145,13 @@ function Home() {
     }
   }, []);
 
-  // Preload ElevenLabs greeting during boot sequence
+  // Load runtime config, then preload ElevenLabs greeting during boot sequence
   useEffect(() => {
-    import("@/components/mc/jarvisTTS").then((jarvisTTS) => {
-      const greetingText = jarvisTTS.getCurrentGreetingText();
-      jarvisTTS.preloadGreeting(greetingText);
+    import("@/lib/env").then(({ initEnv }) => initEnv()).then(() => {
+      import("@/components/mc/jarvisTTS").then((jarvisTTS) => {
+        const greetingText = jarvisTTS.getCurrentGreetingText();
+        jarvisTTS.preloadGreeting(greetingText);
+      });
     });
   }, []);
 

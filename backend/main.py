@@ -7,7 +7,7 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
-from engine import jarvis_engine, MODEL_FAST, MODEL_SMART
+from engine import jarvis_engine, MODEL_FAST, MODEL_SMART, GEMINI_MODEL
 
 load_dotenv_done = True  # already handled in engine.py
 
@@ -82,9 +82,11 @@ async def chat_endpoint(request: Request, body: ChatRequest):
 async def get_status():
     return {
         "status": "active",
-        "engine": "hybrid",
-        "model_fast": MODEL_FAST,
-        "model_smart": MODEL_SMART,
+        "engine": "gemini-primary",
+        "primary_provider": "Gemini",
+        "primary_model": GEMINI_MODEL,
+        "fallback_provider": "Ollama",
+        "fallback_model": MODEL_SMART,
         "gemini_keys_loaded": len([
             k for k in [os.getenv("GEMINI_API_KEY_1"), os.getenv("GEMINI_API_KEY_2")]
             if k and k.strip() not in ("", "your_gemini_api_key_here")
